@@ -74,6 +74,13 @@ pub struct AppSettings {
     /// Truthful, configurable User-Agent (LG-RATE-2).
     #[serde(default = "default_user_agent")]
     pub user_agent: String,
+
+    // ---- Appearance ----
+    /// UI theme: `"system"` | `"light"` | `"dark"`. Default `"system"`. Mirrors
+    /// the account's InterlinedList preference; cached locally so startup has no
+    /// flash and it still applies offline.
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_true() -> bool { true }
@@ -83,6 +90,7 @@ fn default_domain_scope() -> String { "same".to_string() }
 fn default_mirrors_root() -> String { "~/Offline Web".to_string() }
 fn default_rate() -> f64 { 1.0 }
 fn default_concurrency() -> u32 { 2 }
+fn default_theme() -> String { "system".to_string() }
 
 impl Default for AppSettings {
     fn default() -> Self {

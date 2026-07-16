@@ -62,6 +62,7 @@ Identity, what your login unlocks, about/legal links, and sign-out.
 | Setting / element | What it does | Default / value |
 |---|---|---|
 | **Signed in as** | Shows the email of your current InterlinedList account (read from the keychain-backed session). | Your account email, or "Not signed in". |
+| **Appearance → Theme** | Light, Dark, or **Match system** (follows your OS light/dark setting). Your choice is saved to your InterlinedList account and retrieved on sign-in, so it follows you across devices; it's also cached locally so it applies instantly and offline. | `Match system` |
 | **What your login unlocks** | Explains that the app is free and your login is a pure access gate — no tiers, quotas, or subscriptions. Captures stay on-device. | Informational. |
 | **About & legal** | Shows the app version and links to the **Acceptable-use guide** and **interlinedlist.com** (opens in your system browser). | Version string; links. |
 | **Sign out** | Clears your stored login token from the OS keychain and returns you to the sign-in screen. Your saved mirrors stay on disk and remain openable signed-out. | Action. |

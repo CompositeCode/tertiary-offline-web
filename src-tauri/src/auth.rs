@@ -312,8 +312,96 @@ pub fn api_base_url() -> &'static str {
     BASE_URL
 }
 
+// ---- theme preference synced with the InterlinedList account -----------
+//
+// The account is the source of truth for the user's theme so it follows them
+// across devices (Q: "retrieve that setting on startup"). The exact field/route
+// isn't pinned down in the OpenAPI spec, so — as with the sync-token field — we
+// read defensively (several likely key names + one level of nesting) and write
+// best-effort. The frontend also caches the value locally, so an offline launch
+// or a server that doesn't expose a theme still themes correctly.
+
+/// Coerce an arbitrary server value to one of the three supported themes.
+fn normalize_theme(s: &str) -> Option<String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "system" | "auto" | "os" => Some("system".to_string()),
+        "light" => Some("light".to_string()),
+        "dark" => Some("dark".to_string()),
+        _ => None,
+    }
+}
+
+/// Pull a theme out of a `GET /api/user` body, trying likely field names at the
+/// top level and under a nesting key.
+fn extract_theme(body: &serde_json::Value) -> Option<String> {
+    const KEYS: &[&str] = &["theme", "colorScheme", "color_scheme", "appearance", "themePreference"];
+    for key in KEYS {
+        if let Some(v) = body.get(key).and_then(|v| v.as_str()) {
+            if let Some(t) = normalize_theme(v) {
+                return Some(t);
+            }
+        }
+    }
+    for parent in ["user", "settings", "preferences", "profile", "data"] {
+        if let Some(obj) = body.get(parent) {
+            for key in KEYS {
+                if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
+                    if let Some(t) = normalize_theme(v) {
+                        return Some(t);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Fetch the account's theme from InterlinedList. Best-effort: `None` when
+/// signed out, offline, or the server doesn't expose a theme.
+pub fn get_remote_theme() -> Option<String> {
+    let token = read_token()?;
+    let client = http_client().ok()?;
+    let resp = client.get(USER_URL).bearer_auth(&token).send().ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: serde_json::Value = resp.json().ok()?;
+    extract_theme(&json)
+}
+
+/// Persist the account's theme to InterlinedList (best-effort). The frontend's
+/// local cache is the durable store; this just propagates the choice to the
+/// account so other devices pick it up. `PATCH /api/user { theme }` is assumed;
+/// any non-2xx (incl. an unsupported route) surfaces as an error the caller may
+/// ignore.
+pub fn set_remote_theme(theme: &str) -> Result<(), AuthError> {
+    let theme = normalize_theme(theme)
+        .ok_or_else(|| AuthError::Other(format!("unsupported theme: {theme}")))?;
+    let token = read_token().ok_or(AuthError::InvalidCredentials)?;
+    let client = http_client()?;
+    let body = serde_json::json!({ "theme": theme });
+    let resp = client
+        .patch(USER_URL)
+        .bearer_auth(&token)
+        .json(&body)
+        .send()
+        .map_err(|_| AuthError::Unreachable)?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        Err(AuthError::Other(format!(
+            "theme save rejected ({})",
+            resp.status()
+        )))
+    }
+}
+
 // ---- command-facing thin wrappers (map AuthError -> String) ------------
 
 pub fn login_command(email: String, password: String) -> Result<Session, String> {
     login(email, password).map_err(|e| e.to_command_error())
+}
+
+pub fn set_remote_theme_command(theme: String) -> Result<(), String> {
+    set_remote_theme(&theme).map_err(|e| e.to_command_error())
 }

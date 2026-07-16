@@ -80,6 +80,19 @@ fn logout() {
     auth::logout();
 }
 
+/// Fetch the account's theme preference from InterlinedList (best-effort;
+/// `None` when signed out/offline/unsupported). Applied on startup.
+#[tauri::command]
+fn get_remote_theme() -> Option<String> {
+    auth::get_remote_theme()
+}
+
+/// Persist the account's theme preference to InterlinedList (best-effort).
+#[tauri::command]
+fn set_remote_theme(theme: String) -> Result<(), String> {
+    auth::set_remote_theme_command(theme)
+}
+
 /// Scrape a single page to `<out_root>/<host>/`.
 #[tauri::command]
 fn scrape_page(url: String, out_root: String) -> Result<scrape::ScrapeResult, String> {
@@ -490,6 +503,8 @@ pub fn run() {
             login,
             current_session,
             logout,
+            get_remote_theme,
+            set_remote_theme,
             scrape_page,
             start_crawl,
             stop_crawl,

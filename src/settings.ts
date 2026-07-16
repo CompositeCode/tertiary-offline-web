@@ -10,6 +10,9 @@
 
 import { isTauri } from "./tauri";
 
+/** UI theme preference. `"system"` follows the OS light/dark setting. */
+export type Theme = "system" | "light" | "dark";
+
 /** Mirrors the Rust `AppSettings` (serde camelCase). */
 export interface AppSettings {
   acknowledged: boolean;
@@ -25,6 +28,7 @@ export interface AppSettings {
   concurrency: number;
   respectRobots: boolean;
   userAgent: string;
+  theme: Theme;
 }
 
 /** The safe-by-default set (FR-SET-2). Kept identical to the Rust defaults. */
@@ -42,6 +46,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   concurrency: 2,
   respectRobots: true,
   userAgent: "OfflineWeb/0.1.0 (+https://interlinedlist.com)",
+  theme: "system",
 };
 
 /** Session cache of the loaded settings (source of truth is the Rust file). */

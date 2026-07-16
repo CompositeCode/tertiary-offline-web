@@ -82,4 +82,97 @@
   --il-masthead: var(--il-teal);
   --il-on-masthead: #ffffff;
   --il-link: var(--il-teal);
+
+  /* --- Status + neutral surface tokens (semantic) --------------------------
+     Feature CSS (app.css) references THESE instead of raw hex so light and dark
+     stay in sync. The light values below are verbatim the colors app.css used
+     before, so the light theme is unchanged; the dark block overrides them. */
+  --il-surface-hover: #eef2f8;      /* secondary-button / row hover */
+  --il-success-text: #1e7a3d;
+  --il-success-bg: #e6f4ea;
+  --il-warn-text: #7a5900;
+  --il-warn-bg: #fff7e6;
+  --il-warn-border: #ffe0a3;
+  --il-info-text: #1e50a2;
+  --il-info-bg: #eef4ff;
+  --il-info-bg-2: #e6efff;
+  --il-info-border: #cfe0ff;
+  --il-error-text: #a8322c;
+  --il-error-bg: #fdecec;
+  --il-danger-solid: #9c2f22;       /* filled danger button */
+  --il-chip-bg: #e9f3f6;            /* update/info teal chip */
+  --il-chip-border: #c6e0e6;
+}
+
+/* ===========================================================================
+   Dark theme. Applied when the user explicitly picks Dark, or picks System and
+   the OS is in dark mode. Only the SEMANTIC tokens flip — the brand ramp
+   (green/teal/amber) is intentionally shared so branding is identical in both
+   themes. Foreground accent uses --il-link (kept light here) so links, focus
+   rings and active indicators stay visible; filled controls keep --il-accent.
+   =========================================================================== */
+:root[data-theme="dark"] {
+  --il-bg: #0c2c3a;                 /* teal-deep base */
+  --il-surface: #123a4d;
+  --il-cream-surface-2: #16455a;
+  --il-ink: #eaf1f3;
+  --il-muted: #9db4bd;
+  --il-border: rgba(255, 255, 255, 0.12);
+  --il-border-strong: rgba(255, 255, 255, 0.24);
+  --il-accent: #1f5f7a;             /* filled teal controls; white text stays AA */
+  --il-accent-hover: #256a8b;
+  --il-link: #7fb8c4;               /* foreground accent, light on dark */
+  --il-danger: #ff6b5c;
+  --il-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+
+  --il-surface-hover: rgba(255, 255, 255, 0.06);
+  --il-success-text: #5fd39c;
+  --il-success-bg: rgba(47, 168, 119, 0.16);
+  --il-warn-text: #f0c265;
+  --il-warn-bg: rgba(240, 168, 48, 0.15);
+  --il-warn-border: rgba(240, 168, 48, 0.32);
+  --il-info-text: #8fbdf0;
+  --il-info-bg: rgba(90, 150, 240, 0.14);
+  --il-info-bg-2: rgba(90, 150, 240, 0.10);
+  --il-info-border: rgba(90, 150, 240, 0.30);
+  --il-error-text: #ff8a7a;
+  --il-error-bg: rgba(200, 60, 45, 0.18);
+  --il-danger-solid: #c0392b;
+  --il-chip-bg: rgba(127, 184, 196, 0.12);
+  --il-chip-border: rgba(127, 184, 196, 0.28);
+}
+
+/* System = follow the OS. Same overrides as [data-theme="dark"], gated on the
+   OS preference. (Kept in sync with the block above.) */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --il-bg: #0c2c3a;
+    --il-surface: #123a4d;
+    --il-cream-surface-2: #16455a;
+    --il-ink: #eaf1f3;
+    --il-muted: #9db4bd;
+    --il-border: rgba(255, 255, 255, 0.12);
+    --il-border-strong: rgba(255, 255, 255, 0.24);
+    --il-accent: #1f5f7a;
+    --il-accent-hover: #256a8b;
+    --il-link: #7fb8c4;
+    --il-danger: #ff6b5c;
+    --il-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+
+    --il-surface-hover: rgba(255, 255, 255, 0.06);
+    --il-success-text: #5fd39c;
+    --il-success-bg: rgba(47, 168, 119, 0.16);
+    --il-warn-text: #f0c265;
+    --il-warn-bg: rgba(240, 168, 48, 0.15);
+    --il-warn-border: rgba(240, 168, 48, 0.32);
+    --il-info-text: #8fbdf0;
+    --il-info-bg: rgba(90, 150, 240, 0.14);
+    --il-info-bg-2: rgba(90, 150, 240, 0.10);
+    --il-info-border: rgba(90, 150, 240, 0.30);
+    --il-error-text: #ff8a7a;
+    --il-error-bg: rgba(200, 60, 45, 0.18);
+    --il-danger-solid: #c0392b;
+    --il-chip-bg: rgba(127, 184, 196, 0.12);
+    --il-chip-border: rgba(127, 184, 196, 0.28);
+  }
 }

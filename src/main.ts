@@ -4,6 +4,7 @@ import { renderSignIn } from "./screens/signin";
 import { renderShell, takePendingResume } from "./screens/shell";
 import { isSignedIn, refreshSession } from "./auth";
 import { loadSettings } from "./settings";
+import { initTheme, syncThemeFromAccount } from "./theme";
 import { pollForUpdate } from "./banners";
 
 /**
@@ -46,7 +47,12 @@ async function launch(): Promise<void> {
   // Load persisted settings (defaults on first run) before the first render so
   // Defaults pre-populate New Scrape and the first-run ack flag is known.
   await Promise.all([refreshSession(), loadSettings()]);
+  // Apply the cached theme before the first paint so there's no light/dark flash.
+  initTheme();
   route();
+  // Pull the account's theme from InterlinedList and apply if it differs (the
+  // preference follows the user across devices). Non-blocking.
+  void syncThemeFromAccount();
   // Non-blocking update check (Q10). If one is found, re-render so the banner
   // shows on the current screen.
   void pollForUpdate(() => {

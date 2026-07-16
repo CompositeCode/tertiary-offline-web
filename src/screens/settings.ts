@@ -8,7 +8,8 @@ import {
   type DiskUsage,
 } from "../tauri";
 import { getSession, signOut } from "../auth";
-import { getSettings, saveSettings, type AppSettings } from "../settings";
+import { getSettings, saveSettings, type AppSettings, type Theme } from "../settings";
+import { setTheme } from "../theme";
 import { fmtBytes } from "../format";
 import { IL_SITE_URL, IL_SITE_NAME, PRODUCT_NAME } from "../brand";
 import { openAcceptableUse } from "../legal";
@@ -94,6 +95,18 @@ function accountTab(onSignedOut: () => void): HTMLElement {
     (v) => void saveSettings({ crashReports: v }),
   );
 
+  // Appearance (theme). Saved to the InterlinedList account so it follows the
+  // user across devices; applied immediately on change.
+  const themeSel = selectInput(
+    [
+      ["system", "Match system"],
+      ["light", "Light"],
+      ["dark", "Dark"],
+    ],
+    s.theme,
+    (v) => void setTheme(v as Theme),
+  );
+
   const signoutBtn = el(
     "button",
     { class: "btn danger", "aria-label": "Sign out of your InterlinedList account" },
@@ -109,6 +122,14 @@ function accountTab(onSignedOut: () => void): HTMLElement {
     el("div", { class: "field" }, [
       el("label", {}, ["Signed in as"]),
       el("div", { class: "settings-value" }, [email]),
+    ]),
+    el("div", { class: "settings-block" }, [
+      el("div", { class: "settings-block-title" }, ["Appearance"]),
+      field("Theme", themeSel),
+      el("p", { class: "hint", style: "margin-top:2px" }, [
+        `Light, dark, or match your system. Saved to your ${IL_SITE_NAME} account ` +
+          "and applied on every device you sign in to.",
+      ]),
     ]),
     el("div", { class: "settings-block" }, [
       el("div", { class: "settings-block-title" }, ["What your login unlocks"]),
