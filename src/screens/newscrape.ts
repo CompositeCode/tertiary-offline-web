@@ -3,7 +3,6 @@ import { isTauri } from "../tauri";
 import type { CrawlConfig } from "../tauri";
 import { hostOf } from "../format";
 import type { Mirror } from "../store";
-import { renderProgress } from "./progress";
 
 /**
  * Screen D — New scrape. URL field, scope toggle (This page only / Whole site),
@@ -34,7 +33,8 @@ const DEPTH_PRESETS: { label: string; value: number }[] = [
 
 export function renderNewScrape(
   container: HTMLElement,
-  onDone: (m: Mirror) => void,
+  _onDone: (m: Mirror) => void,
+  onStart: (config: CrawlConfig) => void,
 ): void {
   const tauri = isTauri();
 
@@ -249,8 +249,7 @@ export function renderNewScrape(
       maxSeconds: Math.round(clampNum(maxTimeInput.value, 1, 600, DEFAULTS.maxMinutes) * 60),
     };
 
-    container.innerHTML = "";
-    renderProgress(container, config, onDone, () => renderNewScrape(container, onDone));
+    onStart(config);
   });
 }
 

@@ -1,7 +1,7 @@
 import "./styles/brand.css";
 import "./styles/app.css";
 import { renderSignIn } from "./screens/signin";
-import { renderShell } from "./screens/shell";
+import { renderShell, takePendingResume } from "./screens/shell";
 import { isSignedIn, refreshSession } from "./auth";
 
 /**
@@ -10,7 +10,7 @@ import { isSignedIn, refreshSession } from "./auth";
  * renders into #app and calls back into `route()` to re-render.
  */
 
-export type Route = "library" | "new-scrape" | "results";
+export type Route = "library" | "new-scrape" | "results" | "progress";
 
 const root = document.getElementById("app")!;
 
@@ -18,7 +18,17 @@ const root = document.getElementById("app")!;
 export function route(initial: Route = "library"): void {
   root.innerHTML = "";
   if (!isSignedIn()) {
-    renderSignIn(root, () => route("library"));
+    renderSignIn(root, () => {
+      // On successful sign-in, resume any job that auto-paused on session
+      // expiry (FR-AUTH-5). The resume callback re-enters the running crawl.
+      const resume = takePendingResume();
+      if (resume) {
+        resume();
+        route("library");
+      } else {
+        route("library");
+      }
+    });
   } else {
     renderShell(root, initial);
   }

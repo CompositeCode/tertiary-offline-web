@@ -264,6 +264,29 @@ pub fn current_session() -> Option<Session> {
     }
 }
 
+/// Validate the current IL session for a running job (FR-AUTH-5). Returns
+/// `true` if a stored token is present and `GET /api/user` accepts it. A
+/// definitive 401 clears the keychain and returns `false`. A network error is
+/// treated as *still valid* (don't auto-pause a job just because the periodic
+/// check briefly couldn't reach the server — the offline watcher handles genuine
+/// network drops; this check is specifically about token expiry).
+pub fn session_is_valid() -> bool {
+    let Some(token) = read_token() else {
+        return false;
+    };
+    let Ok(client) = http_client() else {
+        return true; // can't check -> assume valid, avoid a spurious pause
+    };
+    match client.get(USER_URL).bearer_auth(&token).send() {
+        Ok(r) if r.status() == reqwest::StatusCode::UNAUTHORIZED => {
+            clear_credentials();
+            false
+        }
+        Ok(_) => true,
+        Err(_) => true, // network hiccup -> not a token-expiry signal
+    }
+}
+
 /// Sign out: best-effort logout call, then delete the stored token regardless.
 pub fn logout() {
     if let Some(token) = read_token() {

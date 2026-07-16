@@ -1,18 +1,40 @@
 import { el } from "../dom";
 import { logoSvg, WORDMARK } from "../brand";
 import { getSession, signOut } from "../auth";
-import { isTauri } from "../tauri";
+import { isTauri, type CrawlConfig } from "../tauri";
 import type { Route } from "../main";
 import { route } from "../main";
 import { renderLibrary } from "./library";
 import { renderNewScrape } from "./newscrape";
 import { renderResults } from "./results";
+import { renderProgress } from "./progress";
+import { configFromMirror } from "../resume";
 import type { Mirror } from "../store";
 
 /** State passed to the Results screen (the most recent completed scrape). */
 let lastMirror: Mirror | null = null;
 export function setLastMirror(m: Mirror): void {
   lastMirror = m;
+}
+
+/**
+ * A pending job to (re)enter Progress with. When `resumeFrom` is set the crawl
+ * resumes a persisted job from disk (Library → Resume); otherwise it starts a
+ * fresh crawl for `config`. Set by `enterProgress` before switching to the
+ * "progress" route.
+ */
+let pendingJob: { config: CrawlConfig; resumeFrom?: string; reattach?: boolean } | null =
+  null;
+
+/**
+ * A pending re-auth resume callback: set when a running job auto-pauses on
+ * session expiry so, after a successful sign-in, we can resume it (FR-AUTH-5).
+ */
+let pendingResume: (() => void) | null = null;
+export function takePendingResume(): (() => void) | null {
+  const r = pendingResume;
+  pendingResume = null;
+  return r;
 }
 
 /**
@@ -32,6 +54,7 @@ export function renderShell(root: HTMLElement, current: Route): void {
       library: "Library",
       "new-scrape": "New scrape",
       results: "Results",
+      progress: "Progress",
     };
     const btn = el(
       "button",
@@ -98,13 +121,56 @@ export function renderShell(root: HTMLElement, current: Route): void {
     setLastMirror(m);
     renderShell(root, "results");
   };
+  const goLibrary = () => renderShell(root, "library");
+
+  // Enter Progress for a fresh crawl (config) or a disk resume (jobDir).
+  const enterProgress = (config: CrawlConfig, resumeFrom?: string) => {
+    pendingJob = { config, resumeFrom };
+    renderShell(root, "progress");
+  };
+
+  // Session-expired handoff: stash a resume-after-reauth callback and route to
+  // Sign-in (FR-AUTH-5). The paused job stays alive in-process; on successful
+  // sign-in we re-enter Progress in reattach mode, which un-parks it and follows
+  // its events to completion. `resume` (the caller's own un-park) is unused
+  // because reattach mode handles the un-park itself.
+  const onSessionExpired = (config2: CrawlConfig, jobDir: string | undefined) => {
+    pendingResume = () => {
+      pendingJob = { config: config2, resumeFrom: jobDir, reattach: true };
+      renderShell(root, "progress");
+    };
+    route();
+  };
+
   if (current === "library") {
-    renderLibrary(contentInner, () => renderShell(root, "new-scrape"), goResults);
+    renderLibrary(
+      contentInner,
+      () => renderShell(root, "new-scrape"),
+      goResults,
+      (m) => enterProgress(configFromMirror(m), m.jobDir),
+    );
   } else if (current === "new-scrape") {
-    renderNewScrape(contentInner, goResults);
+    renderNewScrape(contentInner, goResults, enterProgress);
+  } else if (current === "progress" && pendingJob) {
+    const { config, resumeFrom, reattach } = pendingJob;
+    pendingJob = null;
+    renderProgress(
+      contentInner,
+      config,
+      goResults,
+      goLibrary,
+      onSessionExpired,
+      resumeFrom,
+      reattach,
+    );
   } else if (current === "results" && lastMirror) {
     renderResults(contentInner, lastMirror, () => renderShell(root, "new-scrape"));
   } else {
-    renderLibrary(contentInner, () => renderShell(root, "new-scrape"), goResults);
+    renderLibrary(
+      contentInner,
+      () => renderShell(root, "new-scrape"),
+      goResults,
+      (m) => enterProgress(configFromMirror(m), m.jobDir),
+    );
   }
 }

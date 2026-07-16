@@ -1,0 +1,172 @@
+name: Build installers
+
+# Build deployable installers for macOS, Windows and Linux on every push to main.
+# Outputs (all attached to the Actions run AND to a rolling "latest" prerelease):
+#   macOS   -> .pkg (built with productbuild from the universal .app) + .dmg
+#   Windows -> .msi + NSIS .exe
+#   Linux   -> .AppImage + .deb + .rpm
+#
+# NOTE: installers are UNSIGNED. macOS Gatekeeper / Windows SmartScreen will warn
+# on first launch. See the "Code signing" note at the bottom of this file to add
+# signing later via repository secrets.
+
+on:
+  push:
+    branches: [main]
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch to save CI minutes.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # needed to publish the rolling "latest" release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon runner; build a universal binary so one installer
+          # runs on both Intel and Apple Silicon Macs.
+          - platform: macos-latest
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            tauri_args: "--target universal-apple-darwin"
+          # ubuntu-22.04 links against an older glibc -> AppImage runs on more distros.
+          - platform: ubuntu-22.04
+            rust_targets: ""
+            tauri_args: ""
+          - platform: windows-latest
+            rust_targets: ""
+            tauri_args: ""
+
+    runs-on: ${{ matrix.platform }}
+    name: build (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libgtk-3-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app (installers)
+        uses: tauri-apps/tauri-action@v0
+        with:
+          args: ${{ matrix.tauri_args }}
+
+      - name: Build macOS .pkg from the universal .app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle/macos"
+          app_path="$(find "$bundle_dir" -maxdepth 1 -name '*.app' | head -n1)"
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          out="$bundle_dir/InterlinedList Offline_${version}_universal.pkg"
+          echo "Wrapping $app_path -> $out"
+          productbuild --component "$app_path" /Applications "$out"
+          ls -la "$bundle_dir"
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p installers
+          # Copy whatever this runner produced; ignore globs that match nothing.
+          shopt -s nullglob
+          cp -f \
+            src-tauri/target/release/bundle/msi/*.msi \
+            src-tauri/target/release/bundle/nsis/*.exe \
+            src-tauri/target/release/bundle/appimage/*.AppImage \
+            src-tauri/target/release/bundle/deb/*.deb \
+            src-tauri/target/release/bundle/rpm/*.rpm \
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg \
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.pkg \
+            installers/ 2>/dev/null || true
+          echo "Collected:"
+          ls -la installers/
+
+      - name: Upload installers artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: installers/*
+          if-no-files-found: error
+          retention-days: 30
+
+  # Publish/refresh a single rolling "latest" prerelease so there is always a
+  # stable download URL for the newest main build.
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish rolling "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Use an array so filenames containing spaces (e.g. the .pkg/.dmg) survive.
+          mapfile -t files < <(find artifacts -type f)
+          echo "Releasing:"
+          printf '%s\n' "${files[@]}"
+          # Recreate the tag/release at the current commit so "latest" always
+          # points at the newest main build.
+          gh release delete latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+          gh release create latest "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Latest build (main)" \
+            --notes "Automated installers for the latest \`main\` commit (\`${GITHUB_SHA:0:7}\`). Unsigned — expect Gatekeeper/SmartScreen warnings on first launch." \
+            --prerelease
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Code signing (optional, add later):
+#   macOS  — set repo secrets APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+#            APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID and
+#            pass them as env to the tauri-action step; sign the .pkg with
+#            `productsign --sign "Developer ID Installer: ..."`.
+#   Windows — set WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD and configure
+#            bundle.windows.certificateThumbprint in tauri.conf.json.
+# ─────────────────────────────────────────────────────────────────────────────

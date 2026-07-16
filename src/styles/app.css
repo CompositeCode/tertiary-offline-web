@@ -607,6 +607,54 @@ a {
   color: var(--il-muted);
 }
 
+/* ---- M2: paused-state note, live rate, badges, row actions ----------- */
+.prog-state-note {
+  margin-top: 12px;
+  border-radius: var(--il-radius);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.prog-state-note.paused {
+  background: #fff7e6;
+  border: 1px solid #ffe0a3;
+  color: #7a5900;
+}
+.rate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 4px;
+}
+.rate-row > label {
+  font-weight: 600;
+  min-width: 40px;
+}
+.rate-slider {
+  flex: 1;
+  max-width: 260px;
+}
+.rate-value {
+  font-size: 13px;
+  color: var(--il-muted);
+  min-width: 88px;
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.badge.running {
+  background: #e6efff;
+  color: #1e50a2;
+}
+.badge.paused {
+  background: #fff7e6;
+  color: #7a5900;
+}
+.job-list-slot {
+  min-height: 40px;
+}
+
 /* ---- Results captured list ------------------------------------------- */
 .sub-head {
   font-size: 15px;

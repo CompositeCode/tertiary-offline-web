@@ -52,9 +52,23 @@ export interface CrawlConfig {
   maxSeconds: number;
 }
 
+/** Crawl lifecycle status, including M2 paused/auto-pause states. */
+export type CrawlStatus =
+  | "running"
+  | "paused"
+  | "offline"
+  | "session-expired"
+  | "disk-full"
+  | "finishing"
+  | "done"
+  | "stopped"
+  | "capped"
+  | "error";
+
 /** Live progress payload from `crawl://progress` events. */
 export interface CrawlProgress {
-  status: "running" | "finishing" | "done" | "stopped" | "capped" | "error";
+  jobDir: string;
+  status: CrawlStatus;
   currentUrl: string;
   pagesDone: number;
   pagesDiscovered: number;
@@ -64,6 +78,8 @@ export interface CrawlProgress {
   reasons: Record<string, number>;
   elapsedSecs: number;
   stopReason: string;
+  host: string;
+  url: string;
 }
 
 export interface CapturedItem {
@@ -73,7 +89,7 @@ export interface CapturedItem {
   reason: string;
 }
 
-/** Final result from `start_crawl`. */
+/** Final result from `start_crawl` / `resume_job` (may be a paused status). */
 export interface CrawlResult {
   output_dir: string;
   index_path: string;
@@ -81,10 +97,58 @@ export interface CrawlResult {
   asset_count: number;
   failed_asset_count: number;
   total_bytes: number;
-  status: "done" | "stopped" | "capped" | "error";
+  status: CrawlStatus;
   stopReason: string;
   reasons: Record<string, number>;
   items: CapturedItem[];
+}
+
+/**
+ * A persisted job discovered on disk by `list_jobs` (Library survives restart).
+ * `resumable` is true for paused / partial / interrupted jobs with queued work.
+ */
+export interface JobSummary {
+  jobDir: string;
+  url: string;
+  host: string;
+  status: CrawlStatus;
+  stopReason: string;
+  pageCount: number;
+  totalBytes: number;
+  assetCount: number;
+  failedAssetCount: number;
+  reasons: Record<string, number>;
+  resumable: boolean;
+  updatedAt: number;
+  items: CapturedItem[];
+  indexPath: string;
+}
+
+/** One persisted frontier entry. */
+export interface PersistItem {
+  url: string;
+  depth: number;
+}
+
+/** Full on-disk job state (`<jobDir>/.iloffline/job.json`). */
+export interface PersistedJob {
+  version: number;
+  config: CrawlConfig;
+  status: CrawlStatus;
+  stopReason: string;
+  frontier: PersistItem[];
+  visited: string[];
+  items: CapturedItem[];
+  captured: Record<string, string>;
+  usedPaths: string[];
+  pagesDone: number;
+  pagesDiscovered: number;
+  bytesDownloaded: number;
+  errors: number;
+  assetCount: number;
+  failedAssetCount: number;
+  reasons: Record<string, number>;
+  elapsedSecs: number;
 }
 
 /**
@@ -139,6 +203,49 @@ export function startCrawl(config: CrawlConfig): Promise<CrawlResult> {
 /** Cooperatively stop the running crawl; partial results are kept. */
 export function stopCrawl(): Promise<void> {
   return invokeCmd<void>("stop_crawl");
+}
+
+/** Pause the running crawl (workers idle, frontier kept). */
+export function pauseCrawl(): Promise<void> {
+  return invokeCmd<void>("pause_crawl");
+}
+
+/** Resume a paused (still in-process) crawl. */
+export function resumeCrawl(): Promise<void> {
+  return invokeCmd<void>("resume_crawl");
+}
+
+/** Retune the live rate (and optionally concurrency) without restarting. */
+export function setCrawlRate(ratePerSec: number, concurrency?: number): Promise<void> {
+  return invokeCmd<void>("set_crawl_rate", { ratePerSec, concurrency });
+}
+
+/**
+ * Resume a persisted job from disk after a restart. Behaves like `startCrawl`:
+ * resolves with the final `CrawlResult` and streams `crawl://progress` events.
+ */
+export function resumeJob(jobDir: string): Promise<CrawlResult> {
+  return invokeCmd<CrawlResult>("resume_job", { jobDir });
+}
+
+/** Scan the mirrors root for persisted jobs (Library survives restart). */
+export async function listJobs(outRoot?: string): Promise<JobSummary[]> {
+  if (!isTauri()) return [];
+  return invokeCmd<JobSummary[]>("list_jobs", { outRoot });
+}
+
+/** Load one persisted job's full state (for Results after a cold start). */
+export function loadJob(jobDir: string): Promise<PersistedJob> {
+  return invokeCmd<PersistedJob>("load_job", { jobDir });
+}
+
+/**
+ * Validate the IL session. Returns true if valid; false auto-pauses any running
+ * job on the backend (FR-AUTH-5) and signals the UI to prompt re-sign-in.
+ */
+export async function checkSession(): Promise<boolean> {
+  if (!isTauri()) return true;
+  return invokeCmd<boolean>("check_session");
 }
 
 /**
