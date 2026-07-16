@@ -1,0 +1,230 @@
+name: Release (signed, per-version)
+
+# Stable channel: push a semver tag (e.g. `v0.2.0`) to build SIGNED + notarized
+# installers for macOS, Windows and Linux, publish a per-version GitHub Release,
+# and (when the updater key is set) attach signed updater artifacts + latest.json.
+#
+# This is the channel the in-app updater reads:
+#   plugins.updater.endpoints -> .../releases/latest/download/latest.json
+# GitHub's "latest" resolves to the newest NON-prerelease, i.e. the newest tag
+# built here. The rolling dev prerelease from build.yml is excluded (it's a
+# prerelease), so it never shadows a real release.
+#
+# To cut a release:
+#   1. Bump `version` in package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml.
+#   2. Commit, then: git tag vX.Y.Z && git push origin vX.Y.Z
+#
+# Every signing capability is OPTIONAL and independently gated on its secret, so a
+# tag build still succeeds (just less-signed) before the certs/keys are added:
+#   TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]          -> auto-update artifacts
+#   APPLE_CERTIFICATE / _PASSWORD / _SIGNING_IDENTITY / APPLE_ID / APPLE_PASSWORD
+#     / APPLE_TEAM_ID                             -> sign + notarize .app/.dmg
+#   APPLE_INSTALLER_CERTIFICATE / _PASSWORD / _IDENTITY -> sign the .pkg
+#   WINDOWS_CERTIFICATE / _PASSWORD               -> sign .msi/.exe
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # Fail fast if the tag and the app version disagree, before spinning 3 builds.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify tag matches app version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' != tauri.conf.json version '${ver}'. Bump version in package.json / tauri.conf.json / Cargo.toml before tagging."
+            exit 1
+          fi
+          echo "Tag matches app version ${ver}."
+
+  release:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            tauri_args: "--target universal-apple-darwin"
+          - platform: ubuntu-22.04
+            rust_targets: ""
+            tauri_args: ""
+          - platform: windows-latest
+            rust_targets: ""
+            tauri_args: ""
+
+    runs-on: ${{ matrix.platform }}
+    name: release (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libgtk-3-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Detect updater signing key
+        id: updater
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY not set -> no auto-update artifacts in this release."
+          fi
+
+      - name: Import Windows signing certificate
+        id: winsign
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
+            "thumbprint=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "No WINDOWS_CERTIFICATE secret -> skipping Windows signing."
+            exit 0
+          }
+          $pfxBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "windows-cert.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+          $securePwd = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePwd
+          "thumbprint=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Imported Windows signing cert: $($cert.Thumbprint)"
+
+      # Build one CI config overlay merging whatever signing is enabled, so we pass
+      # a single --config to `tauri build` (multiple --config flags don't merge).
+      - name: Build CI config overlay
+        shell: bash
+        env:
+          UPDATER: ${{ steps.updater.outputs.enabled }}
+          WIN_THUMB: ${{ steps.winsign.outputs.thumbprint }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const o = { bundle: {} };
+            if (process.env.UPDATER === "true") o.bundle.createUpdaterArtifacts = true;
+            if (process.env.WIN_THUMB) o.bundle.windows = { certificateThumbprint: process.env.WIN_THUMB };
+            fs.writeFileSync("src-tauri/ci.overlay.json", JSON.stringify(o, null, 2));
+            console.log("CI overlay:", JSON.stringify(o));
+          '
+
+      - name: Build, sign & publish per-version release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Auto-update signing (minisign). Empty -> tauri-action skips it.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS .app/.dmg signing + notarization. Empty -> tauri-action skips it.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "InterlinedList Offline ${{ github.ref_name }}"
+          releaseBody: |
+            Signed release ${{ github.ref_name }}.
+            Installers: macOS `.pkg`/`.dmg`, Windows `.msi`/`.exe`, Linux `.AppImage`/`.deb`/`.rpm`.
+            In-app auto-update is served from this release's `latest.json`.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: ${{ steps.updater.outputs.enabled == 'true' }}
+          args: ${{ matrix.tauri_args }} --config src-tauri/ci.overlay.json
+
+      # Tauri has no native .pkg target: wrap the universal .app with productbuild,
+      # sign it with the Developer ID Installer identity when available, attach it.
+      - name: Build, sign & attach macOS .pkg
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_INSTALLER_CERTIFICATE: ${{ secrets.APPLE_INSTALLER_CERTIFICATE }}
+          APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
+          APPLE_INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle/macos"
+          app_path="$(find "$bundle_dir" -maxdepth 1 -name '*.app' | head -n1)"
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          unsigned="$bundle_dir/InterlinedList Offline_${version}_universal-unsigned.pkg"
+          out="$bundle_dir/InterlinedList Offline_${version}_universal.pkg"
+          productbuild --component "$app_path" /Applications "$unsigned"
+          if [ -n "${APPLE_INSTALLER_CERTIFICATE:-}" ] && [ -n "${APPLE_INSTALLER_IDENTITY:-}" ]; then
+            kc="$RUNNER_TEMP/installer.keychain-db"
+            kcpass="ci-build-$GITHUB_RUN_ID"
+            security create-keychain -p "$kcpass" "$kc"
+            security set-keychain-settings -lut 21600 "$kc"
+            security unlock-keychain -p "$kcpass" "$kc"
+            echo "$APPLE_INSTALLER_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+            security import "$RUNNER_TEMP/installer.p12" -k "$kc" -P "$APPLE_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productsign
+            security list-keychains -d user -s "$kc" login.keychain-db
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpass" "$kc" >/dev/null
+            productsign --sign "$APPLE_INSTALLER_IDENTITY" "$unsigned" "$out"
+            rm -f "$unsigned"
+            echo "Signed .pkg with '$APPLE_INSTALLER_IDENTITY'."
+          else
+            mv "$unsigned" "$out"
+            echo "::warning::APPLE_INSTALLER_CERTIFICATE not set -> .pkg is unsigned."
+          fi
+          gh release upload "$GITHUB_REF_NAME" "$out" --clobber --repo "$GITHUB_REPOSITORY"

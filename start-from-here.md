@@ -116,35 +116,41 @@ npm run tauri build
 Sign in with an InterlinedList account **email + password**. Sign-in and scraping
 only work in the desktop app, not the browser preview.
 
-## CI / installers (`.github/workflows/build.yml`)
+## CI / installers — two channels (`.github/workflows/`)
 
-On every push to `main` (and via manual "Run workflow"), CI builds installers for
-all three OSes and publishes them:
+All three OSes, both channels: **macOS** `.pkg` (universal `.app` wrapped via
+`productbuild`) + `.dmg`; **Windows** `.msi` + NSIS `.exe`; **Linux** `.AppImage`
++ `.deb` + `.rpm`.
 
-- **macOS** → `.pkg` (wrapped from the universal `.app` via `productbuild`) + `.dmg`
-- **Windows** → `.msi` + NSIS `.exe`
-- **Linux** → `.AppImage` + `.deb` + `.rpm`
+- **Dev channel — `build.yml`** (every push to `main`): **unsigned** installers to
+  a rolling **`latest` prerelease** + per-run workflow artifacts. No auto-update.
+  For testers grabbing the newest main build.
+- **Stable channel — `release.yml`** (push a `vX.Y.Z` tag): **signed + notarized**
+  installers as a per-version release, plus signed updater artifacts + `latest.json`.
+  This is the channel the in-app updater reads (endpoint →
+  `.../releases/latest/download/latest.json`, i.e. newest non-prerelease).
 
-Delivered two ways: as per-run **workflow artifacts**, and as a rolling **`latest`
-prerelease** (`tauri-action` updates it each push) for a stable download URL. OS
-installers are currently **unsigned** — the workflow's trailing comment block
-lists exactly which repo secrets to add for macOS/Windows code signing.
+Everything signing-related is **gated on secrets**, so tag builds pass before any
+cert exists (just less-signed). Secrets to add (repo → Settings → Secrets → Actions):
 
-**Auto-update (GitHub Releases channel) is wired but needs one secret to go
-live.** The app's updater points at
-`https://github.com/CompositeCode/tertiary-offline-web/releases/download/latest/latest.json`
-and the updater **public** key is committed in `tauri.conf.json`. CI only builds
-**signed** updater artifacts + `latest.json` when the repo secret
-`TAURI_SIGNING_PRIVATE_KEY` is set (build stays green without it). The matching
-private key lives at `~/.tauri/interlinedlist-offline-updater.key` on the source
-machine — set it as the secret to activate updates:
+| Secret(s) | Enables |
+|-----------|---------|
+| `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) | Auto-update (signed `latest.json`). Private key is at `~/.tauri/interlinedlist-offline-updater.key` on the source machine; pubkey already committed in `tauri.conf.json`. |
+| `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | Sign + notarize macOS `.app`/`.dmg` |
+| `APPLE_INSTALLER_CERTIFICATE` (+ `_PASSWORD`, `_IDENTITY`) | Sign the macOS `.pkg` |
+| `WINDOWS_CERTIFICATE` (+ `_PASSWORD`) | Sign Windows `.msi`/`.exe` |
+
+Activate auto-update:
 ```bash
 gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/interlinedlist-offline-updater.key
 gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body ""   # key has no password
 ```
-Note: the updater only fires when the released **version is higher than the
-installed one** — bump `version` in `package.json`, `tauri.conf.json`, and
-`Cargo.toml` per release, or the constant `0.1.0` rolling build won't self-update.
+
+**Cutting a stable release:** bump `version` in `package.json`,
+`src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` (they must match — the tag
+build fails otherwise), commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+The updater only delivers versions **newer than what's installed**, so the bump is
+what makes an update fire.
 
 ## Conventions
 

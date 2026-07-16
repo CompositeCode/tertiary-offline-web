@@ -66,7 +66,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/CompositeCode/tertiary-offline-web/releases/download/latest/latest.json"
+        "https://github.com/CompositeCode/tertiary-offline-web/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2MUQ4Q0JBNDMwOEEyRDEKUldUUm9naER1b3dkWm9ack8zZGZYbGRtaEliVVR5eUk4TVczZ2xxdlRJNTE5OXNMNUJWUWozRU4K",
       "windows": {

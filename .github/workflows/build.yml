@@ -1,21 +1,14 @@
-name: Build installers
+name: Build installers (dev channel)
 
-# Build deployable installers for macOS, Windows and Linux on every push to main,
-# and publish them to a single rolling "latest" prerelease.
+# Dev channel: on every push to main, build UNSIGNED installers for macOS,
+# Windows and Linux and publish them to a single rolling "latest" prerelease.
 #   macOS   -> .pkg (built with productbuild from the universal .app) + .dmg
 #   Windows -> .msi + NSIS .exe
 #   Linux   -> .AppImage + .deb + .rpm
 #
-# Auto-update (Tauri updater, GitHub Releases channel):
-#   When the repo secret TAURI_SIGNING_PRIVATE_KEY is present, the build also
-#   produces SIGNED updater artifacts and a `latest.json` manifest, uploaded to
-#   the same "latest" release. The app's updater endpoint points at
-#   https://github.com/CompositeCode/tertiary-offline-web/releases/download/latest/latest.json
-#   Without that secret, the build still succeeds and publishes installers — it
-#   just skips the updater artifacts (so main never breaks before the key is set).
-#
-# NOTE: OS installers are UNSIGNED (Gatekeeper / SmartScreen warn on first launch).
-# Code signing is a separate follow-up — see the note at the bottom of this file.
+# This channel is for testers grabbing the newest main build. It is intentionally
+# unsigned and produces NO auto-update artifacts. Signed, notarized, per-version
+# releases that the in-app updater consumes are built by release.yml on `v*` tags.
 
 on:
   push:
@@ -93,44 +86,24 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      # Only produce (signed) updater artifacts when the signing key exists.
-      # Keeps the build green before the secret is configured.
-      - name: Detect updater signing key
-        id: signing
-        shell: bash
-        env:
-          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          if [ -n "$SIGNING_KEY" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "Updater signing key present -> updater artifacts + latest.json will be produced."
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "No TAURI_SIGNING_PRIVATE_KEY secret -> building installers only (no auto-update artifacts)."
-          fi
-
-      - name: Build Tauri app + publish to "latest" release
+      - name: Build Tauri app + publish to rolling "latest" prerelease
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: latest
-          releaseName: "Latest build (main)"
+          releaseName: "Dev build (latest main)"
           releaseBody: |
-            Automated installers for the latest `main` commit. OS packages are
-            unsigned (Gatekeeper/SmartScreen will warn on first launch). When
-            configured, in-app updates are verified with the Tauri updater key.
+            Rolling, UNSIGNED installers for the newest `main` commit (dev channel).
+            Gatekeeper/SmartScreen will warn on first launch. For signed, updatable
+            builds use a tagged release.
           releaseDraft: false
           prerelease: true
-          # latest.json is only meaningful when we produced signed updater artifacts.
-          includeUpdaterJson: ${{ steps.signing.outputs.enabled == 'true' }}
-          # Append the updater-artifact overlay only when the signing key is present.
-          args: "${{ matrix.tauri_args }} ${{ steps.signing.outputs.enabled == 'true' && '--config src-tauri/updater.conf.json' || '' }}"
+          includeUpdaterJson: false
+          args: ${{ matrix.tauri_args }}
 
       # Tauri has no native .pkg target, so wrap the universal .app with
-      # productbuild and attach it to the same "latest" release.
+      # productbuild and attach it to the same rolling release.
       - name: Build and attach macOS .pkg
         if: runner.os == 'macOS'
         shell: bash
@@ -173,21 +146,3 @@ jobs:
           path: installers/*
           if-no-files-found: error
           retention-days: 30
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Enabling auto-update (one-time):
-#   1. A Tauri updater keypair has been generated; the PUBLIC key is committed in
-#      src-tauri/tauri.conf.json (plugins.updater.pubkey).
-#   2. Add the matching PRIVATE key as repo secrets so CI can sign updates:
-#        gh secret set TAURI_SIGNING_PRIVATE_KEY < <private-key-file>
-#        gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body ""   # empty = no password
-#      (or via GitHub → Settings → Secrets and variables → Actions)
-#   Once set, the next push to main publishes signed updater artifacts + latest.json.
-#
-# OS code signing (separate follow-up, removes Gatekeeper/SmartScreen warnings):
-#   macOS  — secrets APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
-#            APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID;
-#            sign the .pkg with `productsign --sign "Developer ID Installer: ..."`.
-#   Windows — secrets WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD and set
-#            bundle.windows.certificateThumbprint in tauri.conf.json.
-# ─────────────────────────────────────────────────────────────────────────────

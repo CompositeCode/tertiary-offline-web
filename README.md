@@ -28,11 +28,14 @@ unlocked.
 
 ## Quick start
 
-> **Installers are built by CI** on every push to `main` — macOS `.pkg`/`.dmg`,
-> Windows `.msi`/`.exe`, Linux `.AppImage`/`.deb`/`.rpm` (see
-> `.github/workflows/build.yml`). They are currently **unsigned** (Gatekeeper /
-> SmartScreen will warn on first launch); code signing and auto-update are the
-> remaining M5 items. You can also run from source, below.
+> **Installers are built by CI.** Two channels (see `.github/workflows/`):
+> _dev_ — every push to `main` publishes **unsigned** installers to a rolling
+> `latest` prerelease (`build.yml`); _stable_ — pushing a `vX.Y.Z` tag publishes a
+> **signed + notarized**, auto-updatable per-version release (`release.yml`). Both
+> cover macOS `.pkg`/`.dmg`, Windows `.msi`/`.exe`, Linux `.AppImage`/`.deb`/`.rpm`.
+> Signing/notarization and auto-update activate once their secrets/certs are set
+> (they're gated, so builds stay green until then). You can also run from source,
+> below.
 
 **Prereqs:** [Node.js](https://nodejs.org) (npm) and the
 [Rust toolchain](https://rustup.rs). Plus each platform's build deps for the
@@ -104,7 +107,7 @@ Milestones are incremental vertical slices (see `docs/plan.md` §6).
 | **M2** | Long-job UX: live Progress, Pause / Resume / Stop / live Rate, persisted crash-survivable resume | **Shipped** |
 | **M3** | Results & capture report: captured vs. skipped, fidelity notes, inline fixes, Re-scrape / Delete, recovery states | **Shipped** |
 | **M4** | Opt-in JavaScript rendering (drives system Chrome over CDP, no bundled Chromium) for JS-only pages | **Shipped** |
-| **M5** | Settings tabs, first-run ToS acknowledgment, native menus/notifications, accessibility, packaged installers, auto-update | **Mostly shipped** — settings, ToS, menus, notifications, a11y, and CI-built installers are done; **code signing and auto-update are configured but not yet functional** (unsigned installers; updater pubkey is a placeholder) |
+| **M5** | Settings tabs, first-run ToS acknowledgment, native menus/notifications, accessibility, packaged installers, auto-update | **Mostly shipped** — settings, ToS, menus, notifications, a11y, and CI-built installers are done. Code signing and auto-update are **fully wired in CI** (`release.yml`, gated on secrets); they activate once the signing key/certs are added as repo secrets |
 
 ### Honest limitations today
 
@@ -112,13 +115,14 @@ Milestones are incremental vertical slices (see `docs/plan.md` §6).
   JavaScript are flagged **Needs JavaScript**; you can opt into rendering them by
   driving your installed system Chrome over CDP (no Chromium is bundled). Off by
   default.
-- **Installers are unsigned.** CI builds `.pkg`/`.dmg`/`.msi`/`.exe`/`.AppImage`/
-  `.deb`/`.rpm` on every push to `main`, but they are not code-signed yet, so
-  Gatekeeper (macOS) and SmartScreen (Windows) warn on first launch.
-- **Auto-update is not live yet.** The updater is wired in config
-  (`createUpdaterArtifacts`), but the updater public key is a placeholder and no
-  release endpoint is published, so in-app updates don't work until signing keys
-  land.
+- **Dev-channel installers are unsigned.** Rolling `main` builds (`build.yml`)
+  aren't code-signed, so Gatekeeper (macOS) / SmartScreen (Windows) warn on first
+  launch. Tagged releases (`release.yml`) sign + notarize **once the certs are
+  added as repo secrets** — until then they publish unsigned too.
+- **Auto-update goes live once the signing key is set.** The updater plugin,
+  public key, and GitHub-Releases endpoint are wired; tagged releases produce the
+  signed `latest.json` the app reads. It only delivers updates for versions newer
+  than what's installed, so bump the version before tagging.
 - **One job at a time.** Concurrent jobs are deferred beyond v1.
 
 ## Branding
