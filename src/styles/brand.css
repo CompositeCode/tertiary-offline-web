@@ -1,25 +1,76 @@
 /* ===========================================================================
    InterlinedList brand tokens
-   PLACEHOLDER — replace with official InterlinedList assets.
+   Derived from interlinedlist.com on 2026-07-15 — extracted from the live site's
+   production design-token CSS (_next/static/css), the favicon.svg mark, and the
+   page <meta name="theme-color"> values. Replace with the official asset pack
+   when provided.
+
    All brand values live here (and in src/brand.ts) so official colors, radius,
-   and typography swap in without touching any feature CSS.
+   and typography swap in without touching any feature CSS. The token NAMES that
+   feature CSS (app.css) consumes are kept stable; the real InterlinedList ramp is
+   also exposed below so future feature work can use the authentic tokens directly.
    =========================================================================== */
 :root {
-  /* PLACEHOLDER — replace with official InterlinedList palette */
-  --il-primary: #1F3A5F;
-  --il-accent: #3D8BFF;
-  --il-ink: #0E1726;
-  --il-bg: #F7F9FC;
-  --il-surface: #FFFFFF;
-  --il-muted: #5B6B82;
-  --il-danger: #C0392B;
-  --il-radius: 10px;
+  /* --- Authentic InterlinedList brand ramp (verbatim from the live site) ------ */
+  --il-green: #2fa877;          /* primary action / brand green */
+  --il-green-hover: #28936a;
+  --il-teal: #184860;           /* masthead + links */
+  --il-teal-deep: #0c2c3a;      /* dark masthead / dark-theme base */
+  --il-teal-accent: #7fb8c4;
+  --il-teal-bright: #4fd09c;
+  --il-amber: #f0a830;          /* highlight accent */
+  --il-amber-hover: #db9720;
 
-  /* Derived / supporting tokens (placeholder) */
-  --il-primary-hover: #274a76;
-  --il-accent-hover: #2f7bf0;
-  --il-border: #E1E7F0;
-  --il-shadow: 0 1px 3px rgba(14, 23, 38, 0.08), 0 4px 16px rgba(14, 23, 38, 0.06);
-  --il-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  /* Warm light-theme surfaces (the site's light theme is cream, not pure white) */
+  --il-cream-bg: #f4eee2;
+  --il-cream-surface: #fbf7ef;
+  --il-cream-surface-2: #f6f1e7;
+  --il-cream-surface-3: #f1eadd;
+
+  /* Typography stacks from the site (Google Fonts: Space Grotesk / Manrope / JetBrains Mono) */
+  --il-font-display: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --il-font-body: "Manrope", system-ui, -apple-system, sans-serif;
+  --il-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Radius + shadow scale from the site */
+  --il-radius-sm: 3px;
+  --il-radius-md: 4px;
+  --il-radius-lg: 10px;
+  --il-radius-pill: 999px;
+  --il-shadow-card: 0 1px 3px rgba(24, 72, 96, 0.06);
+  --il-shadow-float: 0 10px 34px rgba(24, 72, 96, 0.14);
+
+  /* --- Tokens consumed by feature CSS (names kept stable; mapped to the real ramp) --- */
+  /* PREVIOUS PLACEHOLDER -> DERIVED-FROM-SITE
+     --il-primary  #1F3A5F -> #2fa877 (site --il-primary maps to brand green in light theme)
+     --il-accent   #3D8BFF -> #184860 (site link/masthead teal)
+     --il-ink      #0E1726 -> #16323c (site --il-text)
+     --il-bg       #F7F9FC -> #f4eee2 (site --il-bg, warm cream)
+     --il-surface  #FFFFFF -> #fbf7ef (site --il-surface)
+     --il-muted    #5B6B82 -> #4a6572 (opaque equiv of site --il-text-muted rgba(24,72,96,.55) on cream)
+     --il-danger   #C0392B -> #b83a2b (approximated: site palette has no danger token) */
+  --il-primary: var(--il-green);
+  --il-accent: var(--il-teal);
+  --il-ink: #16323c;
+  --il-bg: var(--il-cream-bg);
+  --il-surface: var(--il-cream-surface);
+  --il-muted: #4a6572;
+  --il-danger: #b83a2b;                 /* approximated — no danger token on the site */
+  --il-radius: var(--il-radius-lg);     /* 10px, matches the site's --il-radius-lg */
+
+  /* Derived / supporting tokens */
+  --il-primary-hover: var(--il-green-hover);
+  --il-accent-hover: var(--il-teal-deep);
+  --il-border: rgba(24, 72, 96, 0.12);          /* site --il-border (light) */
+  --il-border-strong: rgba(24, 72, 96, 0.2);    /* site --il-border-strong (light) */
+  --il-shadow: var(--il-shadow-card);
+  --il-font: var(--il-font-body);
+
+  /* Convenience aliases mirroring the site's semantic names */
+  --il-text: var(--il-ink);
+  --il-text-body: #22383e;
+  --il-text-muted: var(--il-muted);
+  --il-masthead: var(--il-teal);
+  --il-on-masthead: #ffffff;
+  --il-link: var(--il-teal);
 }
