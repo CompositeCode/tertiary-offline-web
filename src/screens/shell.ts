@@ -21,7 +21,7 @@ export function setLastMirror(m: Mirror): void {
  */
 export function renderShell(root: HTMLElement, current: Route): void {
   const session = getSession();
-  const username = session?.username ?? "user";
+  const email = session?.email ?? "user";
 
   const content = el("div", { class: "content" });
   const contentInner = el("div", { class: "content-inner" });
@@ -55,8 +55,9 @@ export function renderShell(root: HTMLElement, current: Route): void {
   );
 
   const signoutBtn = el("button", { class: "signout-btn" }, ["Sign out"]);
-  signoutBtn.addEventListener("click", () => {
-    signOut();
+  signoutBtn.addEventListener("click", async () => {
+    (signoutBtn as HTMLButtonElement).disabled = true;
+    await signOut();
     lastMirror = null;
     route();
   });
@@ -72,8 +73,8 @@ export function renderShell(root: HTMLElement, current: Route): void {
     navItems,
     el("div", { class: "user-chip" }, [
       el("div", { class: "who" }, [
-        el("div", { class: "avatar" }, [username.charAt(0).toUpperCase()]),
-        el("div", { class: "name", title: username }, [username]),
+        el("div", { class: "avatar" }, [email.charAt(0).toUpperCase()]),
+        el("div", { class: "name", title: email }, [email]),
       ]),
       signoutBtn,
     ]),

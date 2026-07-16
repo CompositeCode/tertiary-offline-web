@@ -1,26 +1,24 @@
 //! InterlinedList Offline — Tauri backend.
 //!
 //! Commands:
-//!  - `mock_login`  : mock auth gate (any non-empty user+pass -> dummy token)
-//!  - `scrape_page` : single-page static scrape to disk (M0)
-//!  - `start_crawl` : polite bounded whole-site crawl with progress events (M1)
-//!  - `stop_crawl`  : cooperatively stop the running crawl, keeping partials (M1)
-//!  - `open_path`   : reveal/open a file or folder
+//!  - `login`           : real auth against interlinedlist.com sync-token API,
+//!                        token stored in the OS keychain (never returned)
+//!  - `current_session` : validate a stored token on launch (Library vs Sign-in)
+//!  - `logout`          : invalidate + clear the stored token
+//!  - `scrape_page`     : single-page static scrape to disk (M0)
+//!  - `start_crawl`     : polite bounded whole-site crawl with progress events (M1)
+//!  - `stop_crawl`      : cooperatively stop the running crawl, keeping partials (M1)
+//!  - `open_path`       : reveal/open a file or folder
 
+mod auth;
 mod crawl;
 mod scrape;
 
-use serde::Serialize;
+use auth::Session;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
-
-#[derive(Serialize)]
-pub struct Session {
-    username: String,
-    token: String,
-}
 
 /// App-wide state: the stop flag for the single active crawl (v1 runs one job
 /// at a time — Q8). `None` when no crawl is running.
@@ -29,21 +27,30 @@ struct CrawlState {
     stop: Mutex<Option<Arc<AtomicBool>>>,
 }
 
-/// Mock login. Validates non-empty credentials and returns a dummy token.
-///
-/// TODO(M0->real): replace mock with interlinedlist.com auth API + OS keychain
-/// token storage. The token is NOT persisted anywhere in M0 (frontend holds it
-/// in memory only), keeping the "no plaintext secret" promise honest.
+/// Sign in with email + password against interlinedlist.com's sync-token API.
+/// On success the long-lived Bearer token is stored ONLY in the OS keychain;
+/// the returned `Session` carries just the email (never the token). The
+/// plaintext password never leaves the outgoing HTTPS request body and is
+/// dropped immediately after (NFR-SEC-2, FR-AUTH-2). Errors are prefixed with a
+/// stable kind (`invalid:` / `unreachable:` / `other:`) for the frontend.
 #[tauri::command]
-fn mock_login(username: String, password: String) -> Result<Session, String> {
-    if username.trim().is_empty() || password.is_empty() {
-        return Err("Enter your username and password.".to_string());
-    }
-    Ok(Session {
-        username: username.trim().to_string(),
-        // Dummy, clearly-labeled token — no real credential material.
-        token: format!("mock-token-{}", username.trim()),
-    })
+fn login(email: String, password: String) -> Result<Session, String> {
+    auth::login_command(email, password)
+}
+
+/// Validate any stored token on launch and return the session if valid, else
+/// None (routing Library vs Sign-in). Clears the token on a definitive 401
+/// (FR-AUTH-9). Never returns the token.
+#[tauri::command]
+fn current_session() -> Option<Session> {
+    auth::current_session()
+}
+
+/// Sign out: best-effort server-side invalidation, then clear the keychain
+/// (FR-AUTH-4).
+#[tauri::command]
+fn logout() {
+    auth::logout();
 }
 
 /// Scrape a single page to `<out_root>/<host>/`.
@@ -121,7 +128,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(CrawlState::default())
         .invoke_handler(tauri::generate_handler![
-            mock_login,
+            login,
+            current_session,
+            logout,
             scrape_page,
             start_crawl,
             stop_crawl,

@@ -2,7 +2,7 @@ import "./styles/brand.css";
 import "./styles/app.css";
 import { renderSignIn } from "./screens/signin";
 import { renderShell } from "./screens/shell";
-import { isSignedIn } from "./auth";
+import { isSignedIn, refreshSession } from "./auth";
 
 /**
  * App entry. A tiny state machine routes between the sign-in gate (B) and the
@@ -14,7 +14,7 @@ export type Route = "library" | "new-scrape" | "results";
 
 const root = document.getElementById("app")!;
 
-/** Re-render the whole app based on current auth state. */
+/** Re-render the whole app based on current (already-resolved) auth state. */
 export function route(initial: Route = "library"): void {
   root.innerHTML = "";
   if (!isSignedIn()) {
@@ -24,4 +24,15 @@ export function route(initial: Route = "library"): void {
   }
 }
 
-route();
+/**
+ * Launch: validate any stored token against interlinedlist.com (FR-AUTH-9),
+ * then route to Library if valid or Sign-in if not. A stored-but-offline token
+ * is tolerated by the backend so existing mirrors stay reachable.
+ */
+async function launch(): Promise<void> {
+  root.innerHTML = "";
+  await refreshSession();
+  route();
+}
+
+void launch();

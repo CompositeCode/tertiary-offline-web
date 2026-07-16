@@ -7,8 +7,10 @@ import { logoSvg, WORDMARK, IL_SITE_NAME, IL_SITE_URL, PRODUCT_NAME } from "../b
  * Screen B — Sign-in gate.
  * InterlinedList-branded so users trust entering credentials (Risk R7).
  *
- * TODO(M0->real): replace mock with interlinedlist.com auth API + OS keychain
- * token storage. M0 keeps the token in memory only (see src/auth.ts).
+ * Real auth: the email + password are handed to the Rust `login` command, which
+ * exchanges them over HTTPS for a long-lived Bearer sync token and stores that
+ * token in the OS keychain. The password never leaves the exchange; the token
+ * never crosses into JS (see src/auth.ts, src-tauri/src/auth.rs).
  */
 export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
   let showPassword = false;
@@ -16,9 +18,10 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
   const errorEl = el("div", { class: "error-text", role: "alert" });
   const userInput = el("input", {
     class: "input",
-    type: "text",
-    id: "il-username",
+    type: "email",
+    id: "il-email",
     autocomplete: "username",
+    inputmode: "email",
     placeholder: "you@example.com",
   }) as HTMLInputElement;
   const passInput = el("input", {
@@ -51,8 +54,11 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
     submitBtn.textContent = "Signing in…";
     const err = await signIn(userInput.value, passInput.value);
     if (err) {
-      errorEl.textContent = err;
-      passInput.value = ""; // clear password on failure (never linger)
+      errorEl.textContent = err.message;
+      // Clear the password on any failure so it never lingers in the DOM.
+      // Keep it on "unreachable" so the user can retry without retyping? No —
+      // consistent hygiene: always clear the password field on failure.
+      passInput.value = "";
       submitBtn.disabled = false;
       submitBtn.textContent = "Sign in";
     } else {
@@ -62,7 +68,7 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
 
   const form = el("form", { class: "signin-form", novalidate: true }, [
     el("div", { class: "field" }, [
-      el("label", { for: "il-username" }, ["Username or email"]),
+      el("label", { for: "il-email" }, ["Email"]),
       userInput,
     ]),
     el("div", { class: "field" }, [
@@ -77,7 +83,8 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
   const forgot = el("a", {}, ["Forgot password?"]);
   forgot.addEventListener("click", (e) => {
     e.preventDefault();
-    openExternal(IL_SITE_URL);
+    // Password reset happens on the website, not in the app (FR-AUTH-2b).
+    openExternal(`${IL_SITE_URL}/forgot-password`);
   });
 
   const card = el("div", { class: "signin-card" }, [

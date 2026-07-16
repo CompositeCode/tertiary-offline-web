@@ -13,9 +13,13 @@ export function isTauri(): boolean {
 }
 
 // ---- Backend types (mirror the Rust structs) ---------------------------
+/**
+ * The session the backend exposes to the UI. Deliberately carries only the
+ * account email — the Bearer sync token stays in the OS keychain and never
+ * crosses into the frontend (NFR-SEC-1, FR-AUTH-3).
+ */
 export interface Session {
-  username: string;
-  token: string;
+  email: string;
 }
 
 export interface ScrapeResult {
@@ -96,8 +100,24 @@ async function invokeCmd<T>(cmd: string, args?: Record<string, unknown>): Promis
   return invoke<T>(cmd, args);
 }
 
-export function mockLogin(username: string, password: string): Promise<Session> {
-  return invokeCmd<Session>("mock_login", { username, password });
+/**
+ * Sign in against interlinedlist.com. Resolves with the `Session` (email only)
+ * on success. Rejects with a string error prefixed by a stable kind
+ * (`invalid: …` / `unreachable: …` / `other: …`). The password is passed once
+ * to the backend and never retained here.
+ */
+export function login(email: string, password: string): Promise<Session> {
+  return invokeCmd<Session>("login", { email, password });
+}
+
+/** Validate a stored token on launch. Returns the Session or null. */
+export function currentSession(): Promise<Session | null> {
+  return invokeCmd<Session | null>("current_session");
+}
+
+/** Sign out: invalidate + clear the stored token. */
+export function logout(): Promise<void> {
+  return invokeCmd<void>("logout");
 }
 
 export function scrapePage(url: string, outRoot: string): Promise<ScrapeResult> {
