@@ -28,8 +28,11 @@ unlocked.
 
 ## Quick start
 
-> **You currently run the app from source.** Packaged installers (`.dmg`,
-> Windows/Linux packages) are **Planned** (M5).
+> **Installers are built by CI** on every push to `main` — macOS `.pkg`/`.dmg`,
+> Windows `.msi`/`.exe`, Linux `.AppImage`/`.deb`/`.rpm` (see
+> `.github/workflows/build.yml`). They are currently **unsigned** (Gatekeeper /
+> SmartScreen will warn on first launch); code signing and auto-update are the
+> remaining M5 items. You can also run from source, below.
 
 **Prereqs:** [Node.js](https://nodejs.org) (npm) and the
 [Rust toolchain](https://rustup.rs). Plus each platform's build deps for the
@@ -100,19 +103,22 @@ Milestones are incremental vertical slices (see `docs/plan.md` §6).
 | **M1** | Whole-site crawl: depth, domain scope, dedupe, safety caps, robots.txt, rate limiting, backoff | **Shipped** |
 | **M2** | Long-job UX: live Progress, Pause / Resume / Stop / live Rate, persisted crash-survivable resume | **Shipped** |
 | **M3** | Results & capture report: captured vs. skipped, fidelity notes, inline fixes, Re-scrape / Delete, recovery states | **Shipped** |
-| **M4** | Opt-in JavaScript rendering (headless) for JS-only pages | **Planned** |
-| **M5** | Settings tabs, first-run ToS acknowledgment, native menus/notifications, accessibility, signed installers, auto-update | **Planned / in progress** |
+| **M4** | Opt-in JavaScript rendering (drives system Chrome over CDP, no bundled Chromium) for JS-only pages | **Shipped** |
+| **M5** | Settings tabs, first-run ToS acknowledgment, native menus/notifications, accessibility, packaged installers, auto-update | **Mostly shipped** — settings, ToS, menus, notifications, a11y, and CI-built installers are done; **code signing and auto-update are configured but not yet functional** (unsigned installers; updater pubkey is a placeholder) |
 
 ### Honest limitations today
 
-- **JavaScript rendering is Planned (M4).** Pages that build their content with
-  JavaScript are honestly flagged **Needs JavaScript** rather than saved as
-  silent blanks — but there is no headless-render mode yet.
-- **Settings is Planned (M5).** It appears greyed-out in the sidebar. Mirrors save
-  under `~/InterlinedList Offline/<host>/`; global defaults aren't editable in-app
-  yet.
-- **No packaged installers yet.** Run from source with `npm run tauri dev`;
-  signed installers arrive with M5.
+- **JavaScript rendering is opt-in (M4).** Pages that build their content with
+  JavaScript are flagged **Needs JavaScript**; you can opt into rendering them by
+  driving your installed system Chrome over CDP (no Chromium is bundled). Off by
+  default.
+- **Installers are unsigned.** CI builds `.pkg`/`.dmg`/`.msi`/`.exe`/`.AppImage`/
+  `.deb`/`.rpm` on every push to `main`, but they are not code-signed yet, so
+  Gatekeeper (macOS) and SmartScreen (Windows) warn on first launch.
+- **Auto-update is not live yet.** The updater is wired in config
+  (`createUpdaterArtifacts`), but the updater public key is a placeholder and no
+  release endpoint is published, so in-app updates don't work until signing keys
+  land.
 - **One job at a time.** Concurrent jobs are deferred beyond v1.
 
 ## Branding

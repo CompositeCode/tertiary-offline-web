@@ -61,14 +61,14 @@
         "bundleMediaFramework": false
       }
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://interlinedlist.com/offline/updates/{{target}}/{{arch}}/{{current_version}}"
+        "https://github.com/CompositeCode/tertiary-offline-web/releases/download/latest/latest.json"
       ],
-      "pubkey": "PLACEHOLDER_REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2MUQ4Q0JBNDMwOEEyRDEKUldUUm9naER1b3dkWm9ack8zZGZYbGRtaEliVVR5eUk4TVczZ2xxdlRJNTE5OXNMNUJWUWozRU4K",
       "windows": {
         "installMode": "passive"
       }
