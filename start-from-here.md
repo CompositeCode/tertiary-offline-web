@@ -9,40 +9,27 @@ Read this file first, then `README.md`, then `docs/plan.md`.
 
 ---
 
-## ⚠️ READ THIS FIRST — the real code is NOT on the remote yet
+## READ THIS FIRST — remote is now synced; a plain clone works
 
-The GitHub remote is **stale**. As of this handoff:
+The full app (M2–M5, docs, branding, CI, auto-update wiring) has been pushed.
+`main` and `dev` on the remote both point at the same commit, so **a normal
+`git clone` gives you everything** — no bundle/patch dance needed.
 
-| Ref | Commit | Contains |
-|-----|--------|----------|
-| `origin/main` (what a fresh `git clone` gives you) | `646a713` | **Only M0 + M1.** No M2–M5, no docs beyond early ones, **no CI.** |
-| local `main` (this machine) | `0166348` | Diverged from origin — see below |
-| local **`dev`** (this machine, current branch) | `02b06db` | **Everything real: M2, M3, M4, M5, full docs, official branding/icons, CI workflow, version `0.1.0`.** 9 commits ahead of local `main`. **Never pushed.** |
-
-**If you just cloned the repo, you have almost none of the actual app.** Before
-you do anything, make sure you have the `dev` branch content. One of these must
-happen:
-
-1. **Preferred:** on *this* (source) machine, push `dev` to the remote:
-   ```bash
-   git push -u origin dev
-   # and reconcile main if desired:
-   git push origin main
-   ```
-   Then on your machine: `git fetch && git checkout dev`.
-
-2. **If you can't push:** get the `dev` branch to your machine by bundle/patch
-   (`git bundle create offline-web.bundle --all`) or a direct copy of the working
-   tree. Do **not** start building on top of `origin/main` — you'd be redoing
-   M2–M5.
+| Ref | Contains |
+|-----|----------|
+| `origin/main` (default clone) | **Everything: M0–M5, full docs, official branding/icons, CI workflow, auto-update wiring, version `0.1.0`.** |
+| `origin/dev` | Same commit as `main` right now; use it as the working branch for new work. |
 
 Remote: `git@github.com:CompositeCode/tertiary-offline-web.git`
 
-Confirm you're on the right base before coding:
 ```bash
-git log --oneline -1        # expect 02b06db (or later): "Cleanup: version 0.1.0 consistency …"
-git branch --show-current   # expect: dev
+git clone git@github.com:CompositeCode/tertiary-offline-web.git
+cd tertiary-offline-web
+git checkout dev        # do new work here, then merge/PR to main
 ```
+
+CI builds installers on every push to **`main`**, so land releasable work there
+(or merge `dev → main`). See "CI / installers" below.
 
 ---
 
@@ -139,13 +126,25 @@ all three OSes and publishes them:
 - **Linux** → `.AppImage` + `.deb` + `.rpm`
 
 Delivered two ways: as per-run **workflow artifacts**, and as a rolling **`latest`
-prerelease** (recreated each push) for a stable download URL. Installers are
-currently **unsigned** — the workflow's trailing comment block lists exactly which
-repo secrets to add for macOS/Windows signing.
+prerelease** (`tauri-action` updates it each push) for a stable download URL. OS
+installers are currently **unsigned** — the workflow's trailing comment block
+lists exactly which repo secrets to add for macOS/Windows code signing.
 
-Caveat: the workflow triggers on `main`. Since real work is on `dev`, either
-merge `dev → main` before expecting CI to build the current app, or update the
-trigger branch. (This is a natural follow-up once `dev` is pushed.)
+**Auto-update (GitHub Releases channel) is wired but needs one secret to go
+live.** The app's updater points at
+`https://github.com/CompositeCode/tertiary-offline-web/releases/download/latest/latest.json`
+and the updater **public** key is committed in `tauri.conf.json`. CI only builds
+**signed** updater artifacts + `latest.json` when the repo secret
+`TAURI_SIGNING_PRIVATE_KEY` is set (build stays green without it). The matching
+private key lives at `~/.tauri/interlinedlist-offline-updater.key` on the source
+machine — set it as the secret to activate updates:
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/interlinedlist-offline-updater.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body ""   # key has no password
+```
+Note: the updater only fires when the released **version is higher than the
+installed one** — bump `version` in `package.json`, `tauri.conf.json`, and
+`Cargo.toml` per release, or the constant `0.1.0` rolling build won't self-update.
 
 ## Conventions
 
@@ -158,9 +157,12 @@ trigger branch. (This is a natural follow-up once `dev` is pushed.)
 
 ## First moves for the taker-over
 
-1. Confirm you're on `dev` @ `13a70ce` or later (see warning above). If not, get
-   the `dev` content before anything else.
-2. `npm install && npm run tauri dev` — verify it launches and you can sign in.
-3. Skim `docs/plan.md` (§6 milestones) and reconcile the stale README status table.
-4. Merge `dev → main` (once pushed) so CI produces installers for the real app.
-5. Pick up M5 polish — code signing + auto-update are the biggest open items.
+1. `git clone … && git checkout dev`, then `npm install && npm run tauri dev` —
+   verify it launches and you can sign in.
+2. Skim `docs/plan.md` (§6 milestones); README status now matches reality.
+3. If you own the repo, activate auto-update by setting the
+   `TAURI_SIGNING_PRIVATE_KEY` secret (see "CI / installers" above), then confirm
+   the next `main` build uploads `latest.json` to the `latest` release.
+4. Remaining M5 items: **OS code signing** (Apple Developer ID + Windows cert →
+   removes Gatekeeper/SmartScreen warnings) and **per-version release tagging** so
+   auto-update actually fires. These need certs/decisions from the human owner.
