@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "InterlinedList Offline",
+  "productName": "Offline Web",
   "version": "0.1.0",
   "identifier": "com.interlinedlist.offline",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "InterlinedList Offline",
+        "title": "Offline Web",
         "width": 1040,
         "height": 720,
         "minWidth": 860,
@@ -29,7 +29,7 @@
     "targets": "all",
     "category": "Utility",
     "shortDescription": "Mirror web pages to a local folder for offline reading.",
-    "longDescription": "InterlinedList Offline is a free, cross-platform desktop app that mirrors a single web page or an entire website to a local folder so you can read it offline. Safe, polite defaults; honest static mirrors; your captures never leave your device.",
+    "longDescription": "Offline Web is a free, cross-platform desktop app that mirrors a single web page or an entire website to a local folder so you can read it offline. Safe, polite defaults; honest static mirrors; your captures never leave your device.",
     "copyright": "Copyright © 2026 InterlinedList",
     "publisher": "InterlinedList",
     "homepage": "https://interlinedlist.com",

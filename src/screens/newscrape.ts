@@ -23,7 +23,7 @@ const DEFAULTS = {
   maxPages: 500,
   maxBytesGb: 2,
   maxMinutes: 30,
-  userAgent: "InterlinedListOffline/0.1.0 (+https://interlinedlist.com)",
+  userAgent: "OfflineWeb/0.1.0 (+https://interlinedlist.com)",
 };
 
 const DEPTH_PRESETS: { label: string; value: number }[] = [
@@ -44,7 +44,7 @@ export function renderNewScrape(
   const settings = getSettings();
   // The mirrors root the output folder is derived from; the folder picker can
   // override it per-job.
-  let outRoot = settings.mirrorsRoot || "~/InterlinedList Offline";
+  let outRoot = settings.mirrorsRoot || "~/Offline Web";
 
   container.append(el("div", { class: "page-head" }, [el("h1", {}, ["New scrape"])]));
 

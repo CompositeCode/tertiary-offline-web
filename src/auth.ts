@@ -106,7 +106,7 @@ export async function signIn(
     // than faking a session (consistent with M0/M1 browser-mode behavior).
     return {
       kind: "other",
-      message: "Signing in requires the InterlinedList Offline desktop app.",
+      message: "Signing in requires the Offline Web desktop app.",
     };
   }
 

@@ -18,7 +18,7 @@
 | Q6 robots.txt | **Respect by default; override behind Advanced** + one-time ack + manifest record | LG-ROBOTS-2 path (b). |
 | Q9 Politeness defaults | **1 req/s, concurrency 2, caps 500 pages / 2 GB / 30 min, hard ceiling ~5 req/s** | Fixes FR-SCOPE-5, LG-RATE-1 numbers. |
 | Q3 JS render | **Static default + smart 'needs JavaScript' detection → one-click re-scrape with rendering** | Confirms FR-RENDER path (a); headless is opt-in (M4). |
-| Q5 Branding | **Tie to interlinedlist.com branding** — implemented now with InterlinedList-themed placeholders | Product name **"InterlinedList Offline"**; brand tokens (colors, wordmark, logo) centralized as CSS variables in `src/styles/brand.css` + `src/brand.ts` so official assets swap in without touching feature code. **STILL NEEDS FROM HUMAN:** official logo file, exact hex palette, and final product name to replace placeholders. |
+| Q5 Branding | **Tie to interlinedlist.com branding** — implemented now with InterlinedList-themed placeholders | Product name **"Offline Web"**; brand tokens (colors, wordmark, logo) centralized as CSS variables in `src/styles/brand.css` + `src/brand.ts` so official assets swap in without touching feature code. **STILL NEEDS FROM HUMAN:** official logo file, exact hex palette, and final product name to replace placeholders. |
 
 **Deferrable questions — adopting recommended defaults unless the human overrides:**
 - **Q4 Output format:** browsable file tree for v1; single-file archive (WARC/ZIP) deferred.

@@ -1,9 +1,9 @@
-# InterlinedList Offline — Reference
+# Offline Web — Reference
 
 **Audience:** users who want the full detail behind every Settings control,
 a fix for whatever the app is telling them, and a record of what shipped in v1.
 
-**What this is:** the complete reference for **InterlinedList Offline v1**. It
+**What this is:** the complete reference for **Offline Web v1**. It
 has three parts:
 
 1. [Settings reference](#1-settings-reference) — every setting, tab by tab.
@@ -32,9 +32,9 @@ Open **Settings** from the sidebar. It has four tabs — **Account**,
 >
 > | Platform | Location |
 > |----------|----------|
-> | **macOS** | `~/Library/Application Support/InterlinedList Offline/settings.json` |
-> | **Windows** | `%APPDATA%\InterlinedList Offline\settings.json` |
-> | **Linux** | `$XDG_CONFIG_HOME/InterlinedList Offline/settings.json` (or `~/.config/...`) |
+> | **macOS** | `~/Library/Application Support/Offline Web/settings.json` |
+> | **Windows** | `%APPDATA%\Offline Web\settings.json` |
+> | **Linux** | `$XDG_CONFIG_HOME/Offline Web/settings.json` (or `~/.config/...`) |
 
 - **Changes save immediately** as you edit each control — there is no separate
   "Save" button. Writes use write-then-rename, so a crash mid-save can't
@@ -96,7 +96,7 @@ Where mirrors are saved, how much space they use, and re-scrape semantics.
 
 | Setting / element | What it does | Default | Notes / limits |
 |---|---|---|---|
-| **Mirrors root folder** | The folder new captures are written under, as `<host>/`. **Change…** opens the native folder picker; **Show in Finder/Explorer/Files** reveals it. | `~/InterlinedList Offline` | Changing it does **not** move existing mirrors — only new captures use the new root. Buttons are disabled outside the desktop app. |
+| **Mirrors root folder** | The folder new captures are written under, as `<host>/`. **Change…** opens the native folder picker; **Show in Finder/Explorer/Files** reveals it. | `~/Offline Web` | Changing it does **not** move existing mirrors — only new captures use the new root. Buttons are disabled outside the desktop app. |
 | **Disk usage** | Recursively totals the size of everything under the mirrors root and counts immediate mirror subfolders. | Calculated live | Shown only in the desktop app. Shows "No mirrors yet" before your first capture. |
 | **Re-scrape semantics** | Explains that re-scraping writes a **new dated capture** by default (non-destructive); you can choose **Overwrite in place** from Results, and **Delete** a mirror there to reclaim space. | New dated capture | Informational (the choice is made per re-scrape on the Results screen). |
 
@@ -120,7 +120,7 @@ Global politeness controls that pre-populate New Scrape's Advanced drawer.
 | **Global rate cap (requests/sec/host)** | Default fetch rate per host for new jobs. | **1** | Accepts 0.1–5. **A hard global ceiling of ~5 req/s is enforced in the crawler regardless of what you enter here** — you cannot exceed it even in Advanced. Values ≤ 1 req/s are the marked "polite" zone. |
 | **Concurrency (workers)** | How many pages new jobs fetch at once. | **2** | Accepts 1–8 (whole numbers; clamped). |
 | **robots.txt policy default** | Whether new jobs *Respect* or *Ignore* robots.txt. | **Respect** | Ignoring is an advanced choice; it trips the pre-flight confirm and a one-time acknowledgment (see [Acceptable Use §4](acceptable-use.md#4-the-robotstxt-override)). |
-| **User-Agent** | The identity string the app sends to sites. | `InterlinedListOffline/0.1 (+https://interlinedlist.com)` | Editable, but it is sent **truthfully** — the app never spoofs a UA to evade blocks (LG-RATE-2). |
+| **User-Agent** | The identity string the app sends to sites. | `OfflineWeb/0.1 (+https://interlinedlist.com)` | Editable, but it is sent **truthfully** — the app never spoofs a UA to evade blocks (LG-RATE-2). |
 
 > **The politeness ceiling is not negotiable.** Even if you raise the rate, the
 > crawler clamps the *effective* rate to ~5 req/s and backs off automatically on
@@ -230,7 +230,7 @@ are skipped as **JavaScript rendering unavailable** with:
 installed on this computer. Install Chrome, then try again — or keep the static
 snapshot."*
 
-**What to do:** InterlinedList Offline does **not** bundle a browser (to keep the
+**What to do:** Offline Web does **not** bundle a browser (to keep the
 download small). It drives a **system-installed** Chrome/Chromium/Edge/Brave.
 Install one of those, then re-scrape with rendering. On the New scrape screen the
 **Render JavaScript** toggle is disabled with a tooltip until a browser is found.
@@ -360,7 +360,7 @@ reputation, and it can't be disabled.
 
 ## 3. v1 release notes
 
-**InterlinedList Offline v1** is the first complete release: milestones **M0–M5**
+**Offline Web v1** is the first complete release: milestones **M0–M5**
 plus real InterlinedList authentication, all shipped. Below is what landed,
 organized by capability, followed by an honest list of what did **not** make v1.
 

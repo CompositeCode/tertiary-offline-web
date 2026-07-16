@@ -1,7 +1,7 @@
 [package]
 name = "interlinedlist-offline"
 version = "0.1.0"
-description = "InterlinedList Offline — mirror web pages to a local folder"
+description = "Offline Web — mirror web pages to a local folder"
 authors = ["InterlinedList"]
 edition = "2021"
 rust-version = "1.85"

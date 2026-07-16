@@ -1,7 +1,7 @@
 # Start from here — dev handoff
 
 You (another Claude instance, on a different machine) are taking over development
-of **InterlinedList Offline** — a free cross-platform desktop app (Tauri v2) that
+of **Offline Web** — a free cross-platform desktop app (Tauri v2) that
 mirrors a web page or a whole website to a local folder for offline reading.
 Sign-in with an InterlinedList account gates the scraping features.
 

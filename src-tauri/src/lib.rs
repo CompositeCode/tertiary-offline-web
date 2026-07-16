@@ -1,4 +1,4 @@
-//! InterlinedList Offline — Tauri backend.
+//! Offline Web — Tauri backend.
 //!
 //! Commands:
 //!  - `login`           : real auth against interlinedlist.com sync-token API,
@@ -514,5 +514,5 @@ pub fn run() {
             mirrors_disk_usage
         ])
         .run(tauri::generate_context!())
-        .expect("error while running InterlinedList Offline");
+        .expect("error while running Offline Web");
 }

@@ -1,6 +1,6 @@
-# InterlinedList Offline
+# Offline Web
 
-**InterlinedList Offline** is a free, cross-platform (macOS / Linux / Windows)
+**Offline Web** is a free, cross-platform (macOS / Linux / Windows)
 desktop app that mirrors a web page — or a whole website — to a local folder so
 you can read it offline. It is **free, with no subscription**, but requires
 signing in with a free **InterlinedList** account (interlinedlist.com) to unlock
@@ -74,7 +74,7 @@ network. The output is a **browsable folder tree** with an `index.html` entry
 point:
 
 ```
-~/InterlinedList Offline/<host>/
+~/Offline Web/<host>/
   index.html          # rewritten entry page, opens offline
   assets/             # downloaded images / CSS / fonts / JS
   ...                 # additional captured pages (whole-site jobs)

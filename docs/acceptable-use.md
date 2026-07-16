@@ -1,6 +1,6 @@
-# InterlinedList Offline — Acceptable Use & Your Responsibilities
+# Offline Web — Acceptable Use & Your Responsibilities
 
-**Audience:** everyone who uses InterlinedList Offline.
+**Audience:** everyone who uses Offline Web.
 **What this is:** a plain-language guide to what the app is for, how it protects
 the sites you mirror, and what you're responsible for.
 
@@ -12,9 +12,9 @@ the sites you mirror, and what you're responsible for.
 
 ---
 
-## 1. What InterlinedList Offline is for
+## 1. What Offline Web is for
 
-InterlinedList Offline is a free desktop app that saves a **local, personal copy**
+Offline Web is a free desktop app that saves a **local, personal copy**
 of a web page or website so you can read it offline. Think of it as a smarter
 "Save Page As" that also captures the images, styles, and pages you'd want to
 keep together.
@@ -31,7 +31,7 @@ polite pace, for your own use.**
 
 ### What it must not be used for
 
-Please **do not** use InterlinedList Offline to:
+Please **do not** use Offline Web to:
 
 - **Mass-scrape** sites for data harvesting, resale, or building a competing
   service.
@@ -54,7 +54,7 @@ Please **do not** use InterlinedList Offline to:
 ## 2. How the app protects sites by default
 
 You don't have to be an expert to be a good web citizen. Out of the box,
-InterlinedList Offline is deliberately cautious. If you never open **Advanced**,
+Offline Web is deliberately cautious. If you never open **Advanced**,
 you **cannot** produce an aggressive or abusive crawl. Here's what's working for
 you, and why each one matters.
 
@@ -130,7 +130,7 @@ privacy laws.
 
 ### Your copies stay on your device
 
-> **🔒 What you scrape stays local.** InterlinedList Offline **never uploads your
+> **🔒 What you scrape stays local.** Offline Web **never uploads your
 > mirrored content anywhere.** Captured pages, assets, and reports are written
 > only to the folder on your computer that you chose. There is no cloud sync, no
 > server-side copy of what you scraped, and no back-channel that sends your
@@ -167,7 +167,7 @@ but it puts real friction and responsibility in front of that choice.
 
 ## 5. Privacy and telemetry
 
-InterlinedList Offline is built to know as little about you as possible.
+Offline Web is built to know as little about you as possible.
 
 - **Crash reports are opt-in only.** The app does not send diagnostics unless you
   turn them on. You're asked once, at first run, and you can change your mind any
@@ -195,7 +195,7 @@ modal), with a persistent link to this document from Settings and About.
 
 > **A quick note before you start**
 >
-> InterlinedList Offline saves copies of web content to your computer for offline
+> Offline Web saves copies of web content to your computer for offline
 > reading. You're responsible for respecting each site's terms and copyright —
 > **mirror only content you're allowed to.** By default the app respects
 > robots.txt, fetches politely, and keeps everything on your device — nothing you

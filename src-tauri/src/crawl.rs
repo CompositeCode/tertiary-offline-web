@@ -103,7 +103,7 @@ pub struct CrawlConfig {
 
 fn default_depth() -> u32 { 2 }
 fn default_domain_scope() -> String { "same".to_string() }
-fn default_out_root() -> String { "~/InterlinedList Offline".to_string() }
+fn default_out_root() -> String { "~/Offline Web".to_string() }
 fn default_rate() -> f64 { 1.0 }
 fn default_concurrency() -> u32 { 2 }
 fn default_true() -> bool { true }

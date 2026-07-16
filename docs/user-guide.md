@@ -1,4 +1,4 @@
-# InterlinedList Offline — User Guide
+# Offline Web — User Guide
 
 **Audience:** anyone who wants to save web pages and sites to read offline. No
 technical background needed.
@@ -8,7 +8,7 @@ first mirror, whole-site and advanced options, watching a job, reading your
 results, and troubleshooting.
 
 > **Please read this too:** [Acceptable Use & Your Responsibilities](acceptable-use.md).
-> InterlinedList Offline is built to be a polite web citizen by default, but
+> Offline Web is built to be a polite web citizen by default, but
 > **you** are responsible for mirroring only content you're allowed to copy.
 
 Items marked **Planned** are designed and on the roadmap but **not in the app
@@ -20,7 +20,7 @@ yet**. Everything else is shipped behavior you can use today.
 
 ### What the app is
 
-InterlinedList Offline is a free desktop app for macOS, Windows, and Linux that
+Offline Web is a free desktop app for macOS, Windows, and Linux that
 saves a **local copy** of a web page — or an entire website — to a folder on your
 computer so you can read it offline. Think of it as a smarter "Save Page As" that
 also grabs the images, styles, and linked pages you'd want to keep together, and
@@ -79,13 +79,13 @@ takes a little longer while it compiles; later launches are faster.
 
 ## 2. Signing in
 
-InterlinedList Offline unlocks its features once you sign in with your free
+Offline Web unlocks its features once you sign in with your free
 InterlinedList account.
 
 ### Sign in
 
-1. On launch you'll see the **InterlinedList Offline** sign-in card:
-   *"InterlinedList Offline is free, but requires an InterlinedList account."*
+1. On launch you'll see the **Offline Web** sign-in card:
+   *"Offline Web is free, but requires an InterlinedList account."*
 2. Enter your account **Email**.
 3. Enter your **Password**. Use the **show / hide** toggle next to the field if
    you want to check what you typed.
@@ -118,7 +118,7 @@ remain openable — see below.
 
 ### If your session expires
 
-If your login expires while you're using the app, InterlinedList Offline **never
+If your login expires while you're using the app, Offline Web **never
 fails silently or throws away your work**:
 
 - Any **running job auto-pauses** (it does not fail) and shows *"Your
@@ -148,7 +148,7 @@ fails silently or throws away your work**:
    | **Whole site** | Follows links within scope to capture many pages. See [§4](#4-whole-site--advanced-options). |
 
 4. Under **Save to**, the app shows the default folder it will use:
-   `~/InterlinedList Offline/<site>/` (on Windows, under your user profile).
+   `~/Offline Web/<site>/` (on Windows, under your user profile).
 5. Note the reminder near the bottom: *"Static snapshot — some dynamic features
    won't work offline."*
 6. Click **Start scrape**.
@@ -191,7 +191,7 @@ pre-filled with polite, safe defaults:
 | **Rate (requests/sec/host)** | 1 | How fast the app fetches. A **polite zone of ≤ 1 req/s** is marked; a **hard ceiling of ~5 req/s** applies no matter what. |
 | **Concurrency (workers)** | 2 | How many pages are fetched at once. |
 | **robots.txt** | Respect (default) | Whether to honor the site's `robots.txt`. See below. |
-| **User-agent** | Truthful InterlinedList Offline UA | The identity the app reports to sites. It is honest and not disguised. |
+| **User-agent** | Truthful Offline Web UA | The identity the app reports to sites. It is honest and not disguised. |
 | **Max pages** | 500 | Safety cap — the crawl pauses when it hits this. |
 | **Max size (GB)** | 2 | Safety cap on total downloaded data. |
 | **Max time (minutes)** | 30 | Safety cap on run time. |
@@ -199,7 +199,7 @@ pre-filled with polite, safe defaults:
 ### robots.txt (respected by default)
 
 Most sites publish a small `robots.txt` file telling automated tools which areas
-to avoid. **By default, InterlinedList Offline reads and honors it** — blocked
+to avoid. **By default, Offline Web reads and honors it** — blocked
 pages are skipped and show up in your capture report as "Blocked by robots.txt,"
 so nothing disappears silently.
 
@@ -304,7 +304,7 @@ Below the actions, a **Capture report** breaks down exactly what happened:
 
 ### Fidelity: it's a static snapshot
 
-InterlinedList Offline saves a **static** copy. It faithfully reproduces the
+Offline Web saves a **static** copy. It faithfully reproduces the
 pages, images, and styles it captured, but anything that needs a live server or a
 running app — search boxes, sign-in areas, live feeds, streaming, and some
 interactive JavaScript — won't function in your offline copy. The capture report
@@ -365,7 +365,7 @@ some space (or plan to change the save location) and click **Resume**.
 > **Settings is Planned.** A **Settings** area (Account, Defaults, Storage,
 > Network) is designed and appears greyed-out in the sidebar, but is **not
 > functional yet** (**M5**). For now, each job saves under
-> `~/InterlinedList Offline/<site>/`.
+> `~/Offline Web/<site>/`.
 
 **Where do my scraped pages go — does anything get uploaded?**
 Nothing you scrape ever leaves your computer. Captured pages, assets, and reports
@@ -376,7 +376,7 @@ talks to a server about is signing you in.
 
 ## 8. Using the app responsibly
 
-InterlinedList Offline is safe and polite by default — respecting robots.txt,
+Offline Web is safe and polite by default — respecting robots.txt,
 fetching slowly, staying on the same domain, and stopping at finite caps. If you
 never open Advanced, you can't produce an abusive crawl.
 

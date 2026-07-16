@@ -61,7 +61,7 @@ function firstRunCard(): HTMLElement {
   card.append(
     el("div", { class: "banner-title" }, ["A quick note before you start"]),
     el("div", { class: "banner-text" }, [
-      "InterlinedList Offline saves copies of web content to your computer for " +
+      "Offline Web saves copies of web content to your computer for " +
         "offline reading. You're responsible for respecting each site's terms and " +
         "copyright — mirror only content you're allowed to. By default the app " +
         "respects robots.txt, fetches politely, and keeps everything on your " +

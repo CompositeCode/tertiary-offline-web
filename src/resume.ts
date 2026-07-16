@@ -14,7 +14,7 @@ export function configFromMirror(m: Mirror): CrawlConfig {
     depth: 2,
     domainScope: "same",
     allowedDomains: [],
-    outRoot: "~/InterlinedList Offline",
+    outRoot: "~/Offline Web",
     ratePerSec: 1,
     concurrency: 2,
     respectRobots: true,

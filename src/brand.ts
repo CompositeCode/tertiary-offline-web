@@ -8,20 +8,21 @@
  * =========================================================================== */
 
 /** Full product name shown in headers, titles, and about copy. */
-export const PRODUCT_NAME = "InterlinedList Offline";
+export const PRODUCT_NAME = "Offline Web";
 
 /** The company/site the app authenticates against. */
 export const IL_SITE_NAME = "InterlinedList";
 export const IL_SITE_URL = "https://interlinedlist.com";
 
 /**
- * Wordmark as two parts so "Offline" can render lighter than "InterlinedList".
- * The live site renders the wordmark as plain PascalCase text ("InterlinedList",
- * font-weight:bold, Space Grotesk) next to the icon — matched here.
+ * Wordmark as two parts so "Web" can render lighter than "Offline".
+ * Rendered as plain PascalCase text (font-weight:bold, Space Grotesk) next to
+ * the icon. The app authenticates against InterlinedList (see IL_SITE_NAME) but
+ * the product itself is "Offline Web".
  */
 export const WORDMARK = {
-  primary: "InterlinedList",
-  suffix: "Offline",
+  primary: "Offline",
+  suffix: "Web",
 };
 
 /**

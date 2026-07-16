@@ -82,7 +82,7 @@ fn home_dir() -> Option<PathBuf> {
 /// Default truthful, identifiable User-Agent.
 pub fn default_user_agent() -> String {
     format!(
-        "InterlinedListOffline/{} (+https://interlinedlist.com)",
+        "OfflineWeb/{} (+https://interlinedlist.com)",
         env!("CARGO_PKG_VERSION")
     )
 }

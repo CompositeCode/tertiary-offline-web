@@ -1,7 +1,7 @@
 //! Persistent app settings + first-run acknowledgment (M5, FR-SET-1/2, LG-TOS-1).
 //!
 //! Settings are stored as a small JSON file in the OS app-config directory
-//! (`<config-dir>/InterlinedList Offline/settings.json`) — NOT in the keychain
+//! (`<config-dir>/Offline Web/settings.json`) — NOT in the keychain
 //! (no secrets live here). This is a deliberately dependency-light store: a
 //! single serde struct read/written whole, with `#[serde(default)]` on every
 //! field so an older/partial file upgrades cleanly.
@@ -57,7 +57,7 @@ pub struct AppSettings {
 
     // ---- Storage (FR-SET-1) ----
     /// The mirrors root folder. `~` is expanded at use. Platform-appropriate
-    /// default (`~/InterlinedList Offline`). Changeable via the native picker.
+    /// default (`~/Offline Web`). Changeable via the native picker.
     #[serde(default = "default_mirrors_root")]
     pub mirrors_root: String,
 
@@ -80,7 +80,7 @@ fn default_true() -> bool { true }
 fn default_scope() -> String { "page".to_string() }
 fn default_depth() -> u32 { 2 }
 fn default_domain_scope() -> String { "same".to_string() }
-fn default_mirrors_root() -> String { "~/InterlinedList Offline".to_string() }
+fn default_mirrors_root() -> String { "~/Offline Web".to_string() }
 fn default_rate() -> f64 { 1.0 }
 fn default_concurrency() -> u32 { 2 }
 
@@ -92,10 +92,10 @@ impl Default for AppSettings {
     }
 }
 
-/// Cross-platform app-config directory: `<config>/InterlinedList Offline/`.
-/// - macOS:   `~/Library/Application Support/InterlinedList Offline/`
-/// - Windows: `%APPDATA%\InterlinedList Offline\`
-/// - Linux:   `$XDG_CONFIG_HOME` or `~/.config/InterlinedList Offline/`
+/// Cross-platform app-config directory: `<config>/Offline Web/`.
+/// - macOS:   `~/Library/Application Support/Offline Web/`
+/// - Windows: `%APPDATA%\Offline Web\`
+/// - Linux:   `$XDG_CONFIG_HOME` or `~/.config/Offline Web/`
 ///
 /// Kept dependency-light (no `dirs`/`directories` crate) to honor NFR-SIZE-1.
 fn config_dir() -> PathBuf {
@@ -117,7 +117,7 @@ fn config_dir() -> PathBuf {
                 .unwrap_or_else(|| expand_home("~/.config"))
         }
     };
-    base.join("InterlinedList Offline")
+    base.join("Offline Web")
 }
 
 fn settings_path() -> PathBuf {

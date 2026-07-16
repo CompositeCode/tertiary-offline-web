@@ -71,9 +71,9 @@ impl AuthError {
     }
 }
 
-/// The `deviceLabel` sent to the API, e.g. `InterlinedList Offline (macos)`.
+/// The `deviceLabel` sent to the API, e.g. `Offline Web (macos)`.
 fn device_label() -> String {
-    format!("InterlinedList Offline ({})", std::env::consts::OS)
+    format!("Offline Web ({})", std::env::consts::OS)
 }
 
 /// Build a blocking reqwest client with a truthful UA and TLS validation on
@@ -81,7 +81,7 @@ fn device_label() -> String {
 fn http_client() -> Result<reqwest::blocking::Client, AuthError> {
     reqwest::blocking::Client::builder()
         .user_agent(concat!(
-            "InterlinedListOffline/",
+            "OfflineWeb/",
             env!("CARGO_PKG_VERSION")
         ))
         .timeout(TIMEOUT)
@@ -192,7 +192,7 @@ pub fn login(email: String, password: String) -> Result<Session, AuthError> {
         "email": email,
         "password": password,
         "deviceLabel": device_label(),
-        "name": "InterlinedList Offline",
+        "name": "Offline Web",
     });
 
     let resp = client.post(SYNC_TOKEN_URL).json(&body).send();
