@@ -27,6 +27,62 @@ export interface ScrapeResult {
   total_bytes: number;
 }
 
+// ---- Crawl (M1) --------------------------------------------------------
+
+/** Config sent to `start_crawl` (serde camelCase on the Rust side). */
+export interface CrawlConfig {
+  url: string;
+  /** "page" (this page only) or "site" (whole site). */
+  scope: "page" | "site";
+  depth: number;
+  /** "same" | "subdomains" | "list" | "any". */
+  domainScope: "same" | "subdomains" | "list" | "any";
+  allowedDomains: string[];
+  outRoot: string;
+  ratePerSec: number;
+  concurrency: number;
+  respectRobots: boolean;
+  userAgent?: string;
+  maxPages: number;
+  maxBytes: number;
+  maxSeconds: number;
+}
+
+/** Live progress payload from `crawl://progress` events. */
+export interface CrawlProgress {
+  status: "running" | "finishing" | "done" | "stopped" | "capped" | "error";
+  currentUrl: string;
+  pagesDone: number;
+  pagesDiscovered: number;
+  queueDepth: number;
+  bytesDownloaded: number;
+  errors: number;
+  reasons: Record<string, number>;
+  elapsedSecs: number;
+  stopReason: string;
+}
+
+export interface CapturedItem {
+  url: string;
+  status: "captured" | "partial" | "skipped" | "failed";
+  localPath: string;
+  reason: string;
+}
+
+/** Final result from `start_crawl`. */
+export interface CrawlResult {
+  output_dir: string;
+  index_path: string;
+  page_count: number;
+  asset_count: number;
+  failed_asset_count: number;
+  total_bytes: number;
+  status: "done" | "stopped" | "capped" | "error";
+  stopReason: string;
+  reasons: Record<string, number>;
+  items: CapturedItem[];
+}
+
 /**
  * Invoke a Tauri command. Throws in browser mode — callers must gate on
  * `isTauri()` first. We import `@tauri-apps/api/core` lazily so a plain browser
@@ -50,4 +106,32 @@ export function scrapePage(url: string, outRoot: string): Promise<ScrapeResult> 
 
 export function openPath(path: string): Promise<void> {
   return invokeCmd<void>("open_path", { path });
+}
+
+/**
+ * Start a crawl. Resolves with the final result when the crawl finishes or is
+ * stopped. Live updates arrive via `onCrawlProgress`.
+ */
+export function startCrawl(config: CrawlConfig): Promise<CrawlResult> {
+  return invokeCmd<CrawlResult>("start_crawl", { config });
+}
+
+/** Cooperatively stop the running crawl; partial results are kept. */
+export function stopCrawl(): Promise<void> {
+  return invokeCmd<void>("stop_crawl");
+}
+
+/**
+ * Subscribe to live crawl progress. Returns an unlisten function. In browser
+ * mode (no Tauri runtime) this is a no-op returning a no-op unlisten.
+ */
+export async function onCrawlProgress(
+  handler: (p: CrawlProgress) => void,
+): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen<CrawlProgress>("crawl://progress", (evt) => {
+    handler(evt.payload);
+  });
+  return unlisten;
 }

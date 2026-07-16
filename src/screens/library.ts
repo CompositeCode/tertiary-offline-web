@@ -1,5 +1,5 @@
 import { el } from "../dom";
-import { listMirrors, type Mirror } from "../store";
+import { listMirrors, isCrawl, type Mirror } from "../store";
 import { fmtBytes, fmtDate } from "../format";
 
 /**
@@ -36,15 +36,22 @@ export function renderLibrary(
   for (const m of mirrors) {
     const open = el("button", { class: "btn" }, ["Open"]);
     open.addEventListener("click", () => onOpenMirror(m));
+    const pages = m.result.page_count;
+    const badge =
+      isCrawl(m.result) && m.result.status !== "done"
+        ? m.result.status === "stopped"
+          ? "Stopped"
+          : "Partial"
+        : "Done";
     list.append(
       el("div", { class: "job-row" }, [
         el("div", { class: "meta" }, [
           el("div", { class: "title" }, [
-            el("span", { class: "badge" }, ["Done"]),
+            el("span", { class: "badge" }, [badge]),
             m.host,
           ]),
           el("div", { class: "sub" }, [
-            `${m.result.page_count} page · ${fmtBytes(m.result.total_bytes)} · ${fmtDate(m.capturedAt)}`,
+            `${pages} ${pages === 1 ? "page" : "pages"} · ${fmtBytes(m.result.total_bytes)} · ${fmtDate(m.capturedAt)}`,
           ]),
         ]),
         open,

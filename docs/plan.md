@@ -14,7 +14,7 @@
 | Q13 Framework | **Tauri** (Rust core + native webview) | Small installers, native keychain; headless render is an opt-in/on-demand add-on. |
 | Q2 Auth mechanism | **Username + password via interlinedlist.com API** (direct credential → token exchange) | App shows a native sign-in form, POSTs credentials over HTTPS to the auth API, stores only the returned token in the OS keychain. *Supersedes the earlier browser OAuth/PKCE choice — changed 2026-07-15 at human request; use the API the way it's intended.* |
 | Q1 What login unlocks | **Pure access gate** — no entitlements/quotas/tiers | No usage-metering code. Logged in → all features; logged out → scraping disabled. |
-| IL auth reality | **interlinedlist.com exposes a token-issuing auth API** | Direct integration. **NEEDS FROM HUMAN:** login endpoint URL + request/response JSON shape, token type & lifetime, refresh endpoint (if any), a token-verify/"me" endpoint, and whether login requires MFA/a secondary challenge. |
+| IL auth reality | **RESOLVED via `/api/openapi.json`** (2026-07-15). App uses **`POST /api/auth/sync-token`** with body `{ email, password, deviceLabel?, name? }` → **201 + long-lived Bearer "sync token"**, sent as `Authorization: Bearer <token>` on subsequent calls. (`POST /api/auth/login` also exists → session cookie `interlinedlist-session`, but sync-token is the right fit for a desktop app.) **No MFA** in spec; token is long-lived so **no refresh** needed. `POST /api/auth/logout` invalidates. `POST /api/auth/forgot-password` for reset. | Sign-in field is **email** (not username). Password → memory only → exchanged for token → OS keychain (NFR-SEC-2). |
 | Q6 robots.txt | **Respect by default; override behind Advanced** + one-time ack + manifest record | LG-ROBOTS-2 path (b). |
 | Q9 Politeness defaults | **1 req/s, concurrency 2, caps 500 pages / 2 GB / 30 min, hard ceiling ~5 req/s** | Fixes FR-SCOPE-5, LG-RATE-1 numbers. |
 | Q3 JS render | **Static default + smart 'needs JavaScript' detection → one-click re-scrape with rendering** | Confirms FR-RENDER path (a); headless is opt-in (M4). |
@@ -29,8 +29,8 @@
 - **Q11 Telemetry:** opt-in crash reports only; never includes scraped content/URLs; consent at first-run.
 
 **Two open info items needed from the human before/at M0 (not blocking scaffolding):**
-1. interlinedlist.com auth API details — login endpoint URL, request/response JSON shape, token type & lifetime, refresh endpoint (if any), a token-verify/"me" endpoint, and whether login requires MFA/a secondary challenge.
-2. Final product name, logo, and colors (interlinedlist-tied).
+1. ~~interlinedlist.com auth API details~~ — **RESOLVED** from `/api/openapi.json` (see §0 "IL auth reality"): `POST /api/auth/sync-token` (email+password → long-lived Bearer token). Remaining nicety: confirm the exact JSON field name of the returned token (implementation probes the live response).
+2. Final product name, logo, and colors (interlinedlist-tied). *(Interim: branding is being derived from the live interlinedlist.com site; official asset pack still welcome to finalize.)*
 
 ---
 
