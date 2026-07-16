@@ -1,6 +1,6 @@
 [package]
 name = "interlinedlist-offline"
-version = "0.0.1"
+version = "0.1.0"
 description = "InterlinedList Offline — mirror web pages to a local folder"
 authors = ["InterlinedList"]
 edition = "2021"
@@ -35,6 +35,12 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 # robots.txt parsing (User-agent / Disallow / Allow / Crawl-delay).
 texting_robots = "0.2"
+
+# Cross-platform free-space query for the pre-Start low-space warning
+# (FR-OUT-2) and the Storage tab (FR-SET-1). Deliberately lightweight — a thin
+# wrapper over statvfs / GetDiskFreeSpaceExW, NOT a heavy system-info crate
+# (NFR-SIZE-1). Only the `std` (sync) feature is used.
+fs4 = { version = "0.13", default-features = false, features = ["sync"] }
 
 # Opt-in JavaScript rendering (M4). Drives a SYSTEM-installed Chrome/Chromium
 # over the DevTools Protocol (CDP) — it does NOT bundle or download a browser

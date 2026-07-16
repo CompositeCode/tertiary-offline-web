@@ -1,6 +1,6 @@
 {
   "name": "interlinedlist-offline",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "InterlinedList Offline — free desktop app that mirrors web pages to a local folder. Requires an InterlinedList login.",
   "private": true,
   "type": "module",

@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ratePerSec: 1,
   concurrency: 2,
   respectRobots: true,
-  userAgent: "InterlinedListOffline/0.1 (+https://interlinedlist.com)",
+  userAgent: "InterlinedListOffline/0.1.0 (+https://interlinedlist.com)",
 };
 
 /** Session cache of the loaded settings (source of truth is the Rust file). */

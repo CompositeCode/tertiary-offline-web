@@ -377,8 +377,12 @@ fn mirrors_disk_usage(root: Option<String>) -> DiskUsage {
 }
 
 /// Fire a native OS notification (best-effort — a missing permission is not an
-/// error worth surfacing).
+/// error worth surfacing). Gated on the user's `notifications` setting
+/// (default ON): when the user turns notifications off, nothing fires.
 fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
+    if !settings::load().notifications {
+        return;
+    }
     let _ = app
         .notification()
         .builder()

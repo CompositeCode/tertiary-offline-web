@@ -1,6 +1,7 @@
 import { el } from "../dom";
 import { signIn } from "../auth";
-import { isTauri } from "../tauri";
+import { isTauri, listJobs, revealPath } from "../tauri";
+import { getSettings } from "../settings";
 import { logoSvg, WORDMARK, IL_SITE_NAME, IL_SITE_URL, PRODUCT_NAME } from "../brand";
 import { openAcceptableUse } from "../legal";
 
@@ -88,6 +89,11 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
     openExternal(`${IL_SITE_URL}/forgot-password`);
   });
 
+  // B1. "Trouble signing in?" recovery panel (docs/ux-design.md §4.B). A quiet
+  // affordance that reveals can't-reach guidance, a forgot-password link, and —
+  // when local mirrors exist — a way to open them offline. Collapsed by default.
+  const { toggle: troubleToggle, panel: troublePanel } = buildTroublePanel();
+
   const card = el("div", { class: "signin-card" }, [
     el("div", { class: "signin-header" }, [
       el("div", { class: "logo", html: logoSvg(40) }),
@@ -101,7 +107,8 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
       `${PRODUCT_NAME} is free, but requires an ${IL_SITE_NAME} account.`,
     ]),
     form,
-    el("div", { class: "signin-links" }, [forgot]),
+    el("div", { class: "signin-links" }, [forgot, troubleToggle]),
+    troublePanel,
     el("div", { class: "signin-footer" }, [
       linkBtn("Quit", () => quit()),
       linkBtn("Acceptable use", () => void openAcceptableUse()),
@@ -112,6 +119,68 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
   const wrap = el("div", { class: "signin-wrap" }, [card]);
   root.append(wrap);
   userInput.focus();
+}
+
+/**
+ * B1 recovery panel builder. Returns a small toggle link and the collapsible
+ * help panel it controls. The "browse existing mirrors offline" affordance only
+ * appears once we confirm local mirrors exist on disk (async, non-blocking).
+ */
+function buildTroublePanel(): { toggle: HTMLElement; panel: HTMLElement } {
+  const panel = el("div", { class: "signin-trouble", hidden: true, role: "region" }, [
+    el("p", { class: "hint", style: "margin-top:0" }, [
+      `If ${IL_SITE_NAME} won't load, check your internet connection and try again — ` +
+        `${PRODUCT_NAME} needs to reach ${IL_SITE_NAME} once to sign you in.`,
+    ]),
+    el("p", { class: "hint" }, [
+      "Forgot your password? Reset it on the website, then come back and sign in: ",
+      troubleLink("Reset password", () => openExternal(`${IL_SITE_URL}/forgot-password`)),
+      ".",
+    ]),
+  ]);
+
+  const toggle = el("a", { href: "#", "aria-expanded": "false" }, ["Trouble signing in?"]);
+  toggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    const open = panel.hidden;
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
+  // If local mirrors exist, offer an offline "browse existing mirrors" path.
+  // Sign-in isn't required to read local mirrors, so we surface the folder.
+  if (isTauri()) {
+    void (async () => {
+      try {
+        const root = getSettings().mirrorsRoot;
+        const jobs = await listJobs(root);
+        if (jobs.length > 0) {
+          panel.append(
+            el("p", { class: "hint" }, [
+              `You already have ${jobs.length} mirror${jobs.length === 1 ? "" : "s"} saved on this device. `,
+              troubleLink("Browse existing mirrors offline", () =>
+                void revealPath(root).catch(() => {}),
+              ),
+              " — reading saved mirrors doesn't require signing in.",
+            ]),
+          );
+        }
+      } catch {
+        /* no mirrors / not available — omit the offline affordance */
+      }
+    })();
+  }
+
+  return { toggle, panel };
+}
+
+function troubleLink(label: string, onClick: () => void): HTMLElement {
+  const a = el("a", { href: "#" }, [label]);
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    onClick();
+  });
+  return a;
 }
 
 function linkBtn(label: string, onClick: () => void): HTMLElement {

@@ -23,7 +23,7 @@ const DEFAULTS = {
   maxPages: 500,
   maxBytesGb: 2,
   maxMinutes: 30,
-  userAgent: "InterlinedListOffline/0.1 (+https://interlinedlist.com)",
+  userAgent: "InterlinedListOffline/0.1.0 (+https://interlinedlist.com)",
 };
 
 const DEPTH_PRESETS: { label: string; value: number }[] = [

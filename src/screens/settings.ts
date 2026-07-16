@@ -1,5 +1,12 @@
 import { el } from "../dom";
-import { isTauri, pickFolder, mirrorsDiskUsage, revealPath, type DiskUsage } from "../tauri";
+import {
+  isTauri,
+  pickFolder,
+  mirrorsDiskUsage,
+  revealPath,
+  checkOutputPath,
+  type DiskUsage,
+} from "../tauri";
 import { getSession, signOut } from "../auth";
 import { getSettings, saveSettings, type AppSettings } from "../settings";
 import { fmtBytes } from "../format";
@@ -72,6 +79,20 @@ export function renderSettings(
 
 function accountTab(onSignedOut: () => void): HTMLElement {
   const email = getSession()?.email ?? "Not signed in";
+  const s = getSettings();
+
+  // Notifications & Privacy (wires the previously headless `notifications` /
+  // `crashReports` settings).
+  const notifyToggle = checkboxRow(
+    "Show a native notification when a mirror finishes",
+    s.notifications,
+    (v) => void saveSettings({ notifications: v }),
+  );
+  const crashToggle = checkboxRow(
+    "Send crash reports (opt-in)",
+    s.crashReports,
+    (v) => void saveSettings({ crashReports: v }),
+  );
 
   const signoutBtn = el(
     "button",
@@ -98,8 +119,21 @@ function accountTab(onSignedOut: () => void): HTMLElement {
       ]),
     ]),
     el("div", { class: "settings-block" }, [
+      el("div", { class: "settings-block-title" }, ["Notifications & Privacy"]),
+      el("div", { class: "field" }, [notifyToggle]),
+      el("p", { class: "hint", style: "margin-top:2px" }, [
+        "Native notifications only fire when this is on — they never contain " +
+          "scraped content.",
+      ]),
+      el("div", { class: "field", style: "margin-top:10px" }, [crashToggle]),
+      el("p", { class: "hint", style: "margin-top:2px" }, [
+        "Crash reports are never sent unless you opt in; they never include " +
+          "scraped content or URLs.",
+      ]),
+    ]),
+    el("div", { class: "settings-block" }, [
       el("div", { class: "settings-block-title" }, ["About & legal"]),
-      el("p", { class: "hint" }, [`${PRODUCT_NAME} — version 0.0.1.`]),
+      aboutVersionLine(),
       el("div", { class: "settings-links" }, [
         legalLink("Acceptable-use guide", () => void openAcceptableUse()),
         legalLink("InterlinedList", () => void openExternalUrl(IL_SITE_URL)),
@@ -107,6 +141,30 @@ function accountTab(onSignedOut: () => void): HTMLElement {
     ]),
     el("div", { style: "margin-top:16px" }, [signoutBtn]),
   ]);
+}
+
+/**
+ * Version line for the About block. Reads the real bundle version from the
+ * Tauri app API (`getVersion`) so it can never drift from Cargo/tauri.conf;
+ * falls back to the compile-time constant in browser mode. The constant is
+ * kept in sync with Cargo.toml / package.json / tauri.conf.json.
+ */
+const APP_VERSION_FALLBACK = "0.1.0";
+
+function aboutVersionLine(): HTMLElement {
+  const line = el("p", { class: "hint" }, [`${PRODUCT_NAME} — version ${APP_VERSION_FALLBACK}.`]);
+  if (isTauri()) {
+    void (async () => {
+      try {
+        const { getVersion } = await import("@tauri-apps/api/app");
+        const v = await getVersion();
+        if (v) line.textContent = `${PRODUCT_NAME} — version ${v}.`;
+      } catch {
+        /* keep the fallback */
+      }
+    })();
+  }
+  return line;
 }
 
 function legalLink(label: string, onClick: () => void): HTMLElement {
@@ -199,9 +257,11 @@ function storageTab(s: AppSettings, tauri: boolean): HTMLElement {
   const rootValue = el("div", { class: "readonly-path" }, [s.mirrorsRoot]);
 
   const usageLine = el("div", { class: "settings-value" }, ["Calculating…"]);
+  const freeLine = el("div", { class: "settings-value" }, [tauri ? "Calculating…" : ""]);
   function refreshUsage(): void {
     if (!tauri) {
       usageLine.textContent = "Disk usage is shown in the desktop app.";
+      freeLine.textContent = "";
       return;
     }
     void mirrorsDiskUsage(s.mirrorsRoot).then((u: DiskUsage) => {
@@ -210,6 +270,13 @@ function storageTab(s: AppSettings, tauri: boolean): HTMLElement {
       } else {
         usageLine.textContent = `${fmtBytes(u.totalBytes)} across ${u.mirrorCount} mirror${u.mirrorCount === 1 ? "" : "s"}.`;
       }
+    });
+    // Real free space on the volume that holds the mirrors root (FR-OUT-2 /
+    // FR-SET-1). Reuses the writability/free-space probe.
+    freeLine.textContent = "Calculating…";
+    void checkOutputPath(s.mirrorsRoot).then((c) => {
+      freeLine.textContent =
+        c.freeBytes > 0 ? `${fmtBytes(c.freeBytes)} free on this volume.` : "Free space unavailable.";
     });
   }
   refreshUsage();
@@ -242,6 +309,10 @@ function storageTab(s: AppSettings, tauri: boolean): HTMLElement {
     el("div", { class: "field" }, [
       el("label", {}, ["Disk usage"]),
       usageLine,
+    ]),
+    el("div", { class: "field" }, [
+      el("label", {}, ["Free space"]),
+      freeLine,
     ]),
     el("div", { class: "settings-block" }, [
       el("div", { class: "settings-block-title" }, ["Re-scrape semantics"]),

@@ -146,12 +146,12 @@ fn dir_size(dir: &Path) -> u64 {
 
 // ---- available_space -------------------------------------------------------
 //
-// Determining exact free space portably needs a platform FFI (statvfs /
-// GetDiskFreeSpaceExW) or an extra crate (`fs2`/`sysinfo`). To honor NFR-SIZE-1
-// and avoid an FFI/crate footprint in v1, free space is reported as `0`
-// ("undeterminable") and the writability probe carries FR-OUT-2. The struct
-// field is kept so a later build can populate it without a shape change; the UI
-// only surfaces a low-space warning when a positive value is present.
-fn available_space(_path: &Path) -> u64 {
-    0
+// Free space available to an unprivileged user on the volume that holds `path`,
+// via the lightweight `fs4` crate (a thin statvfs / GetDiskFreeSpaceExW
+// wrapper — NFR-SIZE-1; no heavy `sysinfo`). Returns `0` when it can't be
+// determined (e.g. the path just vanished), which the checks and UI treat as
+// "undeterminable" and fail *open* — a positive value activates the FR-OUT-2
+// low-space warning and the Storage tab's free-space line.
+fn available_space(path: &Path) -> u64 {
+    fs4::available_space(path).unwrap_or(0)
 }
