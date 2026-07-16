@@ -1,0 +1,25 @@
+/* ===========================================================================
+   InterlinedList brand tokens
+   PLACEHOLDER — replace with official InterlinedList assets.
+   All brand values live here (and in src/brand.ts) so official colors, radius,
+   and typography swap in without touching any feature CSS.
+   =========================================================================== */
+:root {
+  /* PLACEHOLDER — replace with official InterlinedList palette */
+  --il-primary: #1F3A5F;
+  --il-accent: #3D8BFF;
+  --il-ink: #0E1726;
+  --il-bg: #F7F9FC;
+  --il-surface: #FFFFFF;
+  --il-muted: #5B6B82;
+  --il-danger: #C0392B;
+  --il-radius: 10px;
+
+  /* Derived / supporting tokens (placeholder) */
+  --il-primary-hover: #274a76;
+  --il-accent-hover: #2f7bf0;
+  --il-border: #E1E7F0;
+  --il-shadow: 0 1px 3px rgba(14, 23, 38, 0.08), 0 4px 16px rgba(14, 23, 38, 0.06);
+  --il-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+}
