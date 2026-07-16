@@ -52,6 +52,12 @@ export interface CrawlConfig {
   maxPages: number;
   maxBytes: number;
   maxSeconds: number;
+  /**
+   * Render JavaScript (M4, FR-RENDER-2): when true, capture the rendered DOM via
+   * a system headless browser instead of a plain static fetch. Opt-in; static
+   * (false) is the default (FR-RENDER-1).
+   */
+  render?: boolean;
 }
 
 /** Crawl lifecycle status, including M2 paused/auto-pause states. */
@@ -195,6 +201,16 @@ export function openPath(path: string): Promise<void> {
 }
 
 /**
+ * Whether a usable system Chrome/Chromium was found, so the UI can honestly
+ * enable/disable the "Render JavaScript" option (M4, brief E-7). No browser is
+ * bundled (NFR-SIZE-1). Returns false in browser mode (no Tauri runtime).
+ */
+export async function renderAvailable(): Promise<boolean> {
+  if (!isTauri()) return false;
+  return invokeCmd<boolean>("render_available");
+}
+
+/**
  * Start a crawl. Resolves with the final result when the crawl finishes or is
  * stopped. Live updates arrive via `onCrawlProgress`.
  */
@@ -300,6 +316,8 @@ export interface ConfigOverrides {
   maxPages?: number;
   maxBytes?: number;
   maxSeconds?: number;
+  /** Turn JavaScript rendering on/off for the re-scrape (render-js fix). */
+  render?: boolean;
 }
 
 /** Options for `rescrape`: overwrite-in-place (else new dated capture) + fixes. */

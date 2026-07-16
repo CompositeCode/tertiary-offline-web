@@ -153,11 +153,6 @@ const ASSET_REFS: &[AssetRef] = &[
 ///
 /// `http` is a shared client so the crawler can reuse connections/UA.
 pub fn capture_page(http: &reqwest::blocking::Client, url: &Url) -> Result<CapturedPage, String> {
-    let host = url
-        .host_str()
-        .ok_or_else(|| "URL has no host.".to_string())?
-        .to_string();
-
     // 1. Fetch the page HTML.
     let resp = http
         .get(url.clone())
@@ -171,7 +166,26 @@ pub fn capture_page(http: &reqwest::blocking::Client, url: &Url) -> Result<Captu
         .text()
         .map_err(|e| format!("Could not read page body: {e}"))?;
 
-    // 2. Parse, find same-origin assets, download them, map original -> local.
+    // 2+. Run the shared capture pipeline over the fetched HTML.
+    capture_html(http, url, html_text)
+}
+
+/// Run the asset-capture + reference-rewrite + link-extraction pipeline over an
+/// already-obtained HTML string for `url`, returning a `CapturedPage`. Shared by
+/// the static path (`capture_page`, which fetches first) and the M4 rendered
+/// path (`render::capture_page_rendered`, which passes the rendered DOM). The
+/// `http` client is used only to download the page's same-origin assets.
+pub fn capture_html(
+    http: &reqwest::blocking::Client,
+    url: &Url,
+    html_text: String,
+) -> Result<CapturedPage, String> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| "URL has no host.".to_string())?
+        .to_string();
+
+    // Parse, find same-origin assets, download them, map original -> local.
     let document = Html::parse_document(&html_text);
     let mut rewrites: HashMap<String, String> = HashMap::new();
     let mut used_names: HashMap<String, u32> = HashMap::new();

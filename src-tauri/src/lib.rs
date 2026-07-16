@@ -29,6 +29,7 @@
 
 mod auth;
 mod crawl;
+mod render;
 mod scrape;
 
 use auth::Session;
@@ -306,6 +307,14 @@ fn rescrape(
     drive_crawl(app, config, controller, None)
 }
 
+/// Report whether a usable system Chrome/Chromium was found, so the UI can
+/// honestly enable/disable the "Render JavaScript" option (M4, brief E-7). No
+/// browser is bundled (NFR-SIZE-1); this is a cheap filesystem/PATH probe.
+#[tauri::command]
+fn render_available() -> bool {
+    render::render_available()
+}
+
 /// Open/reveal a file or folder in the OS default handler.
 #[tauri::command]
 fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
@@ -375,6 +384,7 @@ pub fn run() {
             mirror_files_present,
             delete_mirror,
             rescrape,
+            render_available,
             open_path
         ])
         .run(tauri::generate_context!())

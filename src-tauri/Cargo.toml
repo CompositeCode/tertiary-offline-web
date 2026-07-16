@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "InterlinedList Offline — mirror web pages to a local folder"
 authors = ["InterlinedList"]
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.85"
 
 # The library name the generated bindings look for.
 [lib]
@@ -33,3 +33,10 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 # robots.txt parsing (User-agent / Disallow / Allow / Crawl-delay).
 texting_robots = "0.2"
+
+# Opt-in JavaScript rendering (M4). Drives a SYSTEM-installed Chrome/Chromium
+# over the DevTools Protocol (CDP) — it does NOT bundle or download a browser
+# (NFR-SIZE-1 / Risk R2). The size-heavy `fetch`/`zip`/`walkdir`/`directories`
+# features (which would download Chromium) are deliberately left OFF; we only
+# use CDP with `rustls` TLS to stay consistent with reqwest.
+headless_chrome = { version = "1", default-features = false, features = ["rustls"] }

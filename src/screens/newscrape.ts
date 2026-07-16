@@ -1,5 +1,5 @@
 import { el } from "../dom";
-import { isTauri } from "../tauri";
+import { isTauri, renderAvailable } from "../tauri";
 import type { CrawlConfig } from "../tauri";
 import { hostOf } from "../format";
 import type { Mirror } from "../store";
@@ -151,6 +151,52 @@ export function renderNewScrape(
   const maxSizeInput = numInput(DEFAULTS.maxBytesGb, "0.1", "100");
   const maxTimeInput = numInput(DEFAULTS.maxMinutes, "1", "600");
 
+  // ---- Render JavaScript toggle (D1, M4 / FR-RENDER-2) -------------------
+  // Opt-in; static (unchecked) is the default (FR-RENDER-1). Disabled with a
+  // tooltip until we confirm a system browser exists (render_available), so the
+  // option is honest about what the machine can actually do.
+  let render = false;
+  const renderCheckbox = el("input", { type: "checkbox" }) as HTMLInputElement;
+  // Start disabled: enabled once the availability probe resolves true.
+  renderCheckbox.disabled = true;
+  renderCheckbox.addEventListener("change", () => {
+    render = renderCheckbox.checked;
+  });
+  const renderLabel = el("label", { class: "radio" }, [
+    renderCheckbox,
+    " Render JavaScript (slower)",
+  ]);
+  const renderHint = el("div", { class: "hint", style: "margin-top:6px" }, [
+    "Drives a system Chrome/Chromium to capture pages that build their content with JavaScript. Slower, and needs Chrome installed. Static fetch is the default.",
+  ]);
+  const renderField = el("div", { class: "field" }, [
+    el("label", {}, ["JavaScript rendering"]),
+    renderLabel,
+    renderHint,
+  ]);
+  // Probe availability; enable the toggle only if a browser was found, else set
+  // an explanatory tooltip (E-7). No-op / disabled in browser mode.
+  if (tauri) {
+    void renderAvailable().then((ok) => {
+      if (ok) {
+        renderCheckbox.disabled = false;
+        renderLabel.removeAttribute("title");
+      } else {
+        renderCheckbox.disabled = true;
+        renderCheckbox.checked = false;
+        render = false;
+        renderLabel.setAttribute(
+          "title",
+          "JavaScript rendering needs Google Chrome (or another Chromium browser) installed on this computer.",
+        );
+        renderHint.textContent =
+          "Unavailable: install Google Chrome (or another Chromium browser) to capture JavaScript-rendered pages. Static fetch is used otherwise.";
+      }
+    });
+  } else {
+    renderLabel.setAttribute("title", "Rendering runs in the desktop app.");
+  }
+
   const advancedBody = el("div", { class: "advanced-body", style: "display:none" }, [
     el("div", { class: "field" }, [el("label", {}, ["Domain scope"]), domainScope]),
     allowedField,
@@ -169,6 +215,7 @@ export function renderNewScrape(
       robotsCaution,
     ]),
     el("div", { class: "field" }, [el("label", {}, ["User-agent"]), uaInput]),
+    renderField,
     el("div", { class: "field" }, [el("label", {}, ["Safety limits"])]),
     twoCol(field("Max pages", maxPagesInput), field("Max size (GB)", maxSizeInput)),
     field("Max time (minutes)", maxTimeInput),
@@ -247,6 +294,7 @@ export function renderNewScrape(
         clampNum(maxSizeInput.value, 0.1, 100, DEFAULTS.maxBytesGb) * 1024 * 1024 * 1024,
       ),
       maxSeconds: Math.round(clampNum(maxTimeInput.value, 1, 600, DEFAULTS.maxMinutes) * 60),
+      render,
     };
 
     // Pre-flight confirm sheet (D2, FR-SET-3): shown ONLY when the job trips a

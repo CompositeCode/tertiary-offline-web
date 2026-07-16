@@ -353,9 +353,9 @@ function inlineFixButton(
 function overridesForFix(fix: InlineFix): RescrapeOptions["overrides"] {
   switch (fix.action) {
     case "render-js":
-      // Headless render is M4; pre-set nothing config-wise yet, but re-run so
-      // the JS-only detection re-surfaces. (M4 wires the render flag here.)
-      return {};
+      // M4: re-scrape with JavaScript rendering — drive a system headless
+      // browser and capture the rendered DOM (FR-RENDER-2/3).
+      return { render: true };
     case "increase-depth":
       return { scope: "site", depth: 6 };
     case "allow-subdomains":

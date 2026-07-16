@@ -40,6 +40,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use url::Url;
 
+use crate::render;
 use crate::scrape::{
     self, build_client, capture_page, default_user_agent, expand_home, path_string,
 };
@@ -84,6 +85,12 @@ pub struct CrawlConfig {
     /// Truthful, configurable User-Agent.
     #[serde(default)]
     pub user_agent: Option<String>,
+
+    /// Render mode (M4, FR-RENDER-2): when true, fetch each page by driving a
+    /// system headless browser and capture the rendered DOM; when false (the
+    /// default — FR-RENDER-1) use a plain static HTTP GET. Opt-in only.
+    #[serde(default)]
+    pub render: bool,
 
     // Safety caps -----------------------------------------------------------
     #[serde(default = "default_max_pages")]
@@ -519,6 +526,13 @@ const R_BLOCKED: &str = "rate-limited";
 /// Connection-level failure (DNS / connect / reset) — candidate for a network
 /// drop, drives the auto-offline streak.
 const R_CONNECT: &str = "connection-failed";
+/// A statically-captured page that looks JS-only ("needs JavaScript") — M4
+/// detection (FR-RENDER-3/4). Surfaced by M3's report with a one-click
+/// "Re-scrape with JavaScript rendering" fix.
+const R_NEEDS_JS: &str = "needs-js";
+/// Rendering was requested but no system browser is available (graceful degrade,
+/// never a crash / silent empty page).
+const R_RENDER_UNAVAILABLE: &str = "render-unavailable";
 
 // ----- Frontier item ------------------------------------------------------
 
@@ -1076,8 +1090,31 @@ fn worker<F>(
             }
         }
 
-        // Capture the page.
-        let captured = capture_page(&http, &url);
+        // Capture the page. In render mode (M4, FR-RENDER-2) drive a system
+        // headless browser and capture the rendered DOM; otherwise a plain
+        // static fetch. A rendered capture never triggers JS-only detection
+        // (it IS the JS result).
+        let render_mode = {
+            let g = lock.lock().unwrap();
+            g.cfg.render
+        };
+        let captured = if render_mode {
+            render::capture_page_rendered(&http, &url)
+        } else {
+            capture_page(&http, &url)
+        };
+
+        // JS-only detection (FR-RENDER-3/4): on a *static* capture that looks
+        // near-empty / SPA-shell, record a `needs-js` skip so M3's report offers
+        // the one-click render fix — never a silent empty page. Conservative
+        // (see `render::looks_js_only`), so we only redirect thin+script-heavy
+        // pages here. The seed page is still written (below) so the user sees
+        // *something*; but we also flag it for the report.
+        let needs_js = !render_mode
+            && captured
+                .as_ref()
+                .map(|p| render::looks_js_only(&p.html))
+                .unwrap_or(false);
 
         let mut g = lock.lock().unwrap();
         match captured {
@@ -1092,11 +1129,21 @@ fn worker<F>(
                 let local = allocate_local_path(&mut g, &url);
                 g.captured.insert(normalize(&url), local.clone());
                 g.pages_done += 1;
+                // A page that looks JS-only is still captured + written (honest
+                // partial), but tagged `needs-js` so the report offers the
+                // render fix (FR-RENDER-3/4). Status stays `captured` so it
+                // remains browsable/openable; the reason drives the report group.
+                let (status, reason) = if needs_js {
+                    *g.reasons.entry(R_NEEDS_JS.to_string()).or_insert(0) += 1;
+                    ("captured", R_NEEDS_JS.to_string())
+                } else {
+                    ("captured", String::new())
+                };
                 g.items.push(CapturedItem {
                     url: url.as_str().to_string(),
-                    status: "captured".to_string(),
+                    status: status.to_string(),
                     local_path: local.clone(),
-                    reason: String::new(),
+                    reason,
                 });
 
                 // Write assets immediately (relative to the page's dir).
@@ -1368,7 +1415,10 @@ fn record_skip(g: &mut Shared, url: &Url, reason: &str) {
 
 fn classify_error(e: &str) -> &'static str {
     let lo = e.to_lowercase();
-    if lo.contains("http 429") || lo.contains("http 403") {
+    if lo.contains("needs google chrome") || lo.contains("needs a chromium") {
+        // Render requested but no system browser — graceful, actionable skip.
+        R_RENDER_UNAVAILABLE
+    } else if lo.contains("http 429") || lo.contains("http 403") {
         R_BLOCKED
     } else if lo.contains("http ") {
         R_HTTP_ERROR
@@ -1896,8 +1946,13 @@ fn explain_reason(reason: &str, cfg: &CrawlConfig) -> (String, String, Option<In
         ),
         "needs-js" | "js-only" => (
             "Needs JavaScript".to_string(),
-            "These pages render their content with JavaScript, so the static snapshot came up nearly empty.".to_string(),
+            "These pages render their content with JavaScript, so the static snapshot came up nearly empty. Re-scrape with JavaScript rendering to capture the full page.".to_string(),
             Some(InlineFix { action: "render-js".to_string(), label: "Re-scrape with JavaScript rendering".to_string() }),
+        ),
+        R_RENDER_UNAVAILABLE => (
+            "JavaScript rendering unavailable".to_string(),
+            "Rendering these pages needs Google Chrome (or another Chromium browser) installed on this computer. Install Chrome, then try again — or keep the static snapshot.".to_string(),
+            None,
         ),
         R_HTTP_ERROR => (
             "HTTP error".to_string(),
@@ -2007,6 +2062,9 @@ pub struct ConfigOverrides {
     pub max_pages: Option<u32>,
     pub max_bytes: Option<u64>,
     pub max_seconds: Option<u64>,
+    /// M4: turn JavaScript rendering on/off for the re-scrape. Set by the
+    /// `render-js` inline fix so the re-run drives a headless browser.
+    pub render: Option<bool>,
 }
 
 /// A dated capture folder name for the re-scrape scheme:
@@ -2080,6 +2138,9 @@ pub fn rescrape_config(job_dir: &str, opts: &RescrapeOptions) -> Result<CrawlCon
         }
         if let Some(v) = ov.max_seconds {
             cfg.max_seconds = v;
+        }
+        if let Some(v) = ov.render {
+            cfg.render = v;
         }
     }
 
