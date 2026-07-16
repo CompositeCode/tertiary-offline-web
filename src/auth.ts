@@ -53,12 +53,17 @@ export async function refreshSession(): Promise<Session | null> {
 }
 
 /**
- * Handle a session-expired signal from an authenticated call (e.g. a future
- * crawl-time request that returns 401). Drops the cached session so the app's
- * `route()` sends the user back to the Sign-in gate. Full auto-pause/resume of
- * an in-flight job is M2 (FR-AUTH-5); for now clearing the session + routing to
- * Sign-in is the honest "don't fail silently" behavior. The keychain token is
- * cleared lazily by `current_session()` on the next launch/validation.
+ * Handle a session-expired signal from an authenticated call. Drops the cached
+ * session so the app's `route()` sends the user back to the Sign-in gate.
+ *
+ * The full auto-pause → re-auth → resume flow (FR-AUTH-5) is implemented across
+ * the screens: the backend `check_session` command auto-PAUSES any running job
+ * on a definitive 401 (it never fails the job), the Progress screen surfaces the
+ * session-expired state, and `shell.ts` stashes a resume-after-sign-in callback
+ * (`takePendingResume`) that re-enters the paused job on successful re-auth. This
+ * function is the UI-cache half of that: it just clears the cached session. The
+ * keychain token is cleared lazily by `current_session()` on the next
+ * launch/validation.
  */
 export function handleSessionExpired(): void {
   session = null;

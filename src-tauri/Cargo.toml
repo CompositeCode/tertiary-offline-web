@@ -18,6 +18,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+# Native folder picker (FR-OUT-1/2 "Change…" chooser for output + mirrors root).
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -40,3 +42,9 @@ texting_robots = "0.2"
 # features (which would download Chromium) are deliberately left OFF; we only
 # use CDP with `rustls` TLS to stay consistent with reqwest.
 headless_chrome = { version = "1", default-features = false, features = ["rustls"] }
+
+# Built-in auto-update (Q10, NFR-XPLAT-1) — desktop only, with a non-blocking
+# update banner in the UI. Endpoints + signing pubkey are configured in
+# tauri.conf.json (`plugins.updater`). The mobile targets have no updater.
+[target."cfg(any(target_os = \"macos\", target_os = \"windows\", target_os = \"linux\"))".dependencies]
+tauri-plugin-updater = "2"

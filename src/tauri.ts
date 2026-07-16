@@ -201,6 +201,113 @@ export function openPath(path: string): Promise<void> {
 }
 
 /**
+ * Reveal a file/folder in the native file manager (Finder / Explorer / Files) —
+ * the platform "Show in …" action (NFR-XPLAT-1). Falls back to opening the path.
+ */
+export function revealPath(path: string): Promise<void> {
+  return invokeCmd<void>("reveal_path", { path });
+}
+
+// ---- Settings + folder picker + storage (M5) --------------------------
+
+/** Result of validating an output folder before Start (FR-OUT-2). */
+export interface PathCheck {
+  resolved: string;
+  writable: boolean;
+  freeBytes: number;
+  error: string | null;
+}
+
+/** Recursive disk usage of the mirrors root (Storage settings tab). */
+export interface DiskUsage {
+  root: string;
+  exists: boolean;
+  totalBytes: number;
+  mirrorCount: number;
+}
+
+/**
+ * Open the NATIVE folder picker (tauri-plugin-dialog) and return the chosen
+ * directory, or null if the user cancelled. No-op (null) in browser mode.
+ */
+export async function pickFolder(defaultPath?: string): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({
+    directory: true,
+    multiple: false,
+    defaultPath: defaultPath && !defaultPath.startsWith("~") ? defaultPath : undefined,
+    title: "Choose a folder",
+  });
+  if (typeof picked === "string") return picked;
+  return null;
+}
+
+/** Validate an output folder's writability + free space before Start (FR-OUT-2). */
+export async function checkOutputPath(path: string): Promise<PathCheck> {
+  if (!isTauri()) {
+    return { resolved: path, writable: true, freeBytes: 0, error: null };
+  }
+  return invokeCmd<PathCheck>("check_output_path", { path });
+}
+
+/** Recursive disk usage of the mirrors root (Storage tab). */
+export async function mirrorsDiskUsage(root?: string): Promise<DiskUsage> {
+  if (!isTauri()) {
+    return { root: root ?? "", exists: false, totalBytes: 0, mirrorCount: 0 };
+  }
+  return invokeCmd<DiskUsage>("mirrors_disk_usage", { root });
+}
+
+/**
+ * Subscribe to native-menu navigation events (`menu://navigate` carries the
+ * item id: "new-scrape" | "settings"). Returns an unlisten function; no-op in
+ * browser mode.
+ */
+export async function onMenuNavigate(
+  handler: (id: string) => void,
+): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen<string>("menu://navigate", (evt) => {
+    handler(evt.payload);
+  });
+  return unlisten;
+}
+
+/** A pending app update discovered by the updater plugin (Q10). */
+export interface UpdateInfo {
+  version: string;
+  /** Kick off download + install; the app relaunches into the new version. */
+  install: () => Promise<void>;
+}
+
+/**
+ * Check for an available update via the Tauri updater (Q10, NFR-XPLAT-1).
+ * Returns update info when one is available, else null. Best-effort: any error
+ * (offline, misconfigured endpoint, placeholder pubkey) resolves to null so the
+ * banner simply never appears — updates are non-blocking.
+ */
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  if (!isTauri()) return null;
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check();
+    if (!update) return null;
+    return {
+      version: update.version,
+      install: async () => {
+        await update.downloadAndInstall();
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether a usable system Chrome/Chromium was found, so the UI can honestly
  * enable/disable the "Render JavaScript" option (M4, brief E-7). No browser is
  * bundled (NFR-SIZE-1). Returns false in browser mode (no Tauri runtime).

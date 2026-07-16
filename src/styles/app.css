@@ -54,12 +54,23 @@ a {
   background: #eef2f8;
 }
 .btn.primary {
-  background: var(--il-primary);
+  /* AA-compliant action green: white-on-green now clears 4.5:1 (NFR-A11Y-1). */
+  background: var(--il-green-aa);
   color: #fff;
-  border-color: var(--il-primary);
+  border-color: var(--il-green-aa);
 }
 .btn.primary:hover {
-  background: var(--il-primary-hover);
+  background: var(--il-green-aa-hover);
+  border-color: var(--il-green-aa-hover);
+}
+.btn.danger {
+  background: var(--il-danger);
+  color: #fff;
+  border-color: var(--il-danger);
+}
+.btn.danger:hover {
+  background: #9c2f22;
+  border-color: #9c2f22;
 }
 .btn.accent {
   background: var(--il-accent);
@@ -109,7 +120,18 @@ a {
 .input:focus {
   outline: none;
   border-color: var(--il-accent);
-  box-shadow: 0 0 0 3px rgba(61, 139, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(24, 72, 96, 0.18);
+}
+
+/* Visible keyboard focus on all interactive controls (NFR-A11Y-1). Mouse users
+   don't see it (:focus-visible); keyboard/AT users get a clear teal ring. */
+:focus-visible {
+  outline: 2px solid var(--il-accent);
+  outline-offset: 2px;
+}
+/* On the green sidebar, a teal ring is low-contrast — use white there. */
+.sidebar :focus-visible {
+  outline-color: #fff;
 }
 .input-group {
   position: relative;
@@ -437,7 +459,7 @@ a {
 }
 .choice.selected {
   border-color: var(--il-accent);
-  background: rgba(61, 139, 255, 0.06);
+  background: rgba(24, 72, 96, 0.06);
 }
 .choice.disabled {
   opacity: 0.55;
@@ -454,7 +476,9 @@ a {
 .fidelity-note {
   background: #eef4ff;
   border: 1px solid #cfe0ff;
-  color: var(--il-primary);
+  /* Was --il-primary (brand green ~2.6:1 on this near-white bg) — switched to
+     the teal ink for AA-legible body text (NFR-A11Y-1). */
+  color: var(--il-accent);
   border-radius: var(--il-radius);
   padding: 12px 14px;
   font-size: 13px;
@@ -887,4 +911,132 @@ a {
 }
 .sheet .btn.block:first-of-type {
   margin-top: 8px;
+}
+
+/* ---- M5: folder-picker row ------------------------------------------- */
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.path-row .readonly-path {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- M5: Settings (screen H) ----------------------------------------- */
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--il-border);
+  margin-bottom: 20px;
+}
+.settings-tab {
+  border: none;
+  background: transparent;
+  color: var(--il-muted);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.settings-tab:hover {
+  color: var(--il-ink);
+}
+.settings-tab.active {
+  color: var(--il-accent);
+  border-bottom-color: var(--il-accent);
+}
+.settings-value {
+  font-size: 14px;
+  color: var(--il-ink);
+  padding: 4px 0;
+}
+.settings-block {
+  margin-top: 18px;
+  border-top: 1px solid var(--il-border);
+  padding-top: 14px;
+}
+.settings-block-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.settings-block .hint {
+  margin: 0;
+}
+.settings-links {
+  display: flex;
+  gap: 18px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+/* ---- M5: global banners (offline / session / update / first-run ack) -- */
+.banner {
+  border-radius: var(--il-radius);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.banner-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+.banner-text {
+  line-height: 1.5;
+}
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.banner-dismiss {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+  opacity: 0.7;
+}
+.banner-dismiss:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+/* First-run acknowledgment: neutral, informative. */
+.banner.ack {
+  background: var(--il-cream-surface-2);
+  border: 1px solid var(--il-border-strong);
+  color: var(--il-ink);
+}
+/* Offline: amber, non-blocking. */
+.banner.offline {
+  background: #fff7e6;
+  border: 1px solid #ffe0a3;
+  color: #7a5900;
+}
+/* Session-expired: attention (teal, actionable). */
+.banner.session {
+  background: #eef4ff;
+  border: 1px solid #cfe0ff;
+  color: var(--il-accent);
+}
+/* Update-available: teal accent, dismissible. */
+.banner.update {
+  background: #e9f3f6;
+  border: 1px solid #c6e0e6;
+  color: var(--il-accent);
+  flex-direction: row;
+  align-items: center;
+}
+.banner.update .banner-text {
+  flex: 1;
 }

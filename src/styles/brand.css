@@ -58,6 +58,15 @@
   --il-danger: #b83a2b;                 /* approximated — no danger token on the site */
   --il-radius: var(--il-radius-lg);     /* 10px, matches the site's --il-radius-lg */
 
+  /* Accessibility (NFR-A11Y-1): white text on the brand green (#2fa877) is only
+     ~2.6:1 — below WCAG AA (4.5:1). For ACTIONABLE buttons we use a darkened
+     brand green that keeps the brand identity but reaches AA with white text.
+     `#0f6f4a` on #fff ≈ 5.3:1 (default) / `#0c5d3e` hover ≈ 6.7:1. The lighter
+     `--il-green` is still used for non-text brand surfaces (the sidebar fill,
+     the logo), where the large area/graphic-only usage isn't AA-text-bound. */
+  --il-green-aa: #0f6f4a;
+  --il-green-aa-hover: #0c5d3e;
+
   /* Derived / supporting tokens */
   --il-primary-hover: var(--il-green-hover);
   --il-accent-hover: var(--il-teal-deep);

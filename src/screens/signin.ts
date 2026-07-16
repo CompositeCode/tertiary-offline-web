@@ -2,6 +2,7 @@ import { el } from "../dom";
 import { signIn } from "../auth";
 import { isTauri } from "../tauri";
 import { logoSvg, WORDMARK, IL_SITE_NAME, IL_SITE_URL, PRODUCT_NAME } from "../brand";
+import { openAcceptableUse } from "../legal";
 
 /**
  * Screen B — Sign-in gate.
@@ -103,7 +104,7 @@ export function renderSignIn(root: HTMLElement, onSuccess: () => void): void {
     el("div", { class: "signin-links" }, [forgot]),
     el("div", { class: "signin-footer" }, [
       linkBtn("Quit", () => quit()),
-      linkBtn("About", () => alert(`${PRODUCT_NAME}\nM0 walking skeleton.`)),
+      linkBtn("Acceptable use", () => void openAcceptableUse()),
       linkBtn("Help", () => openExternal(IL_SITE_URL)),
     ]),
   ]);

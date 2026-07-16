@@ -1,15 +1,52 @@
 import { el } from "../dom";
 import { logoSvg, WORDMARK } from "../brand";
 import { getSession, signOut } from "../auth";
-import { isTauri, deleteMirror, type CrawlConfig, type RescrapeOptions } from "../tauri";
+import {
+  isTauri,
+  deleteMirror,
+  onMenuNavigate,
+  type CrawlConfig,
+  type RescrapeOptions,
+} from "../tauri";
 import type { Route } from "../main";
 import { route } from "../main";
 import { renderLibrary } from "./library";
 import { renderNewScrape } from "./newscrape";
 import { renderResults } from "./results";
 import { renderProgress } from "./progress";
+import { renderSettings } from "./settings";
+import { renderBanners } from "../banners";
 import { configFromMirror } from "../resume";
 import type { Mirror } from "../store";
+
+/**
+ * Keyboard-shortcut + native-menu wiring, installed once. Complements the OS
+ * menu accelerators (⌘/Ctrl-N, ⌘/Ctrl-,) with in-webview handlers so the
+ * shortcuts work even when a control has focus, and routes native-menu clicks.
+ */
+let globalNavHooked = false;
+function installGlobalNav(navigate: (r: Route) => void): void {
+  if (globalNavHooked) return;
+  globalNavHooked = true;
+
+  // In-webview keyboard shortcuts (NFR-XPLAT-1 / NFR-A11Y-1).
+  window.addEventListener("keydown", (e) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    if (e.key === "n" || e.key === "N") {
+      e.preventDefault();
+      navigate("new-scrape");
+    } else if (e.key === ",") {
+      e.preventDefault();
+      navigate("settings");
+    }
+  });
+
+  // Native menu clicks (New scrape / Settings).
+  void onMenuNavigate((id) => {
+    if (id === "new-scrape") navigate("new-scrape");
+    else if (id === "settings") navigate("settings");
+  });
+}
 
 /** State passed to the Results screen (the most recent completed scrape). */
 let lastMirror: Mirror | null = null;
@@ -53,16 +90,23 @@ export function renderShell(root: HTMLElement, current: Route): void {
   const contentInner = el("div", { class: "content-inner" });
   content.append(contentInner);
 
+  // Global keyboard shortcuts + native-menu navigation (installed once).
+  installGlobalNav((r) => renderShell(root, r));
+
   function nav(target: Route): HTMLElement {
     const labels: Record<Route, string> = {
       library: "Library",
       "new-scrape": "New scrape",
       results: "Results",
       progress: "Progress",
+      settings: "Settings",
     };
     const btn = el(
       "button",
-      { class: `nav-item${current === target ? " active" : ""}` },
+      {
+        class: `nav-item${current === target ? " active" : ""}`,
+        "aria-current": current === target ? "page" : "false",
+      },
       [labels[target]],
     );
     btn.addEventListener("click", () => renderShell(root, target));
@@ -75,11 +119,8 @@ export function renderShell(root: HTMLElement, current: Route): void {
   ]);
   // Results is only reachable once something has been scraped.
   if (lastMirror) navItems.append(nav("results"));
-  navItems.append(
-    el("div", { class: "nav-item", style: "opacity:.5;cursor:default" }, [
-      "Settings",
-    ]),
-  );
+  // Settings (H) is now real (M5).
+  navItems.append(nav("settings"));
 
   const signoutBtn = el("button", { class: "signout-btn" }, ["Sign out"]);
   signoutBtn.addEventListener("click", async () => {
@@ -109,6 +150,10 @@ export function renderShell(root: HTMLElement, current: Route): void {
 
   root.innerHTML = "";
   root.append(el("div", { class: "shell" }, [sidebar, content]));
+
+  // Global banners docked at the top of the content area: first-run ToS ack
+  // (LG-TOS-1), offline (NFR-OFF-1), and update-available (Q10).
+  renderBanners(contentInner);
 
   // Browser-mode banner (native scrape unavailable).
   if (!isTauri()) {
@@ -207,6 +252,12 @@ export function renderShell(root: HTMLElement, current: Route): void {
     );
   } else if (current === "results" && lastMirror) {
     renderResults(contentInner, lastMirror, resultsActions(lastMirror));
+  } else if (current === "settings") {
+    renderSettings(contentInner, () => {
+      // Signed out from Account tab: drop state and return to the Sign-in gate.
+      lastMirror = null;
+      route();
+    });
   } else {
     renderLibrary(
       contentInner,

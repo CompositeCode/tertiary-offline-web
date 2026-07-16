@@ -1,17 +1,19 @@
 import { el } from "../dom";
-import { isTauri, renderAvailable } from "../tauri";
+import { isTauri, renderAvailable, pickFolder, checkOutputPath } from "../tauri";
 import type { CrawlConfig } from "../tauri";
 import { hostOf } from "../format";
 import type { Mirror } from "../store";
+import { getSettings } from "../settings";
 
 /**
  * Screen D — New scrape. URL field, scope toggle (This page only / Whole site),
  * depth presets, an Advanced drawer (D1) with domain scope / rate / concurrency
- * / robots / safety caps, all pre-filled with safe defaults. On Start it routes
- * to the live Progress screen (F).
+ * / robots / safety caps, all pre-filled from Settings → Defaults (FR-SET-2). On
+ * Start it validates the output folder (FR-OUT-2) then routes to Progress (F).
  */
 
-// Safe defaults (plan §0 / Q9).
+// Safe defaults (plan §0 / Q9). These are the hard-coded fallbacks; Settings →
+// Defaults (FR-SET-2) override the seed values at render time via `getSettings`.
 const DEFAULTS = {
   depth: 2,
   domainScope: "same" as const,
@@ -37,6 +39,12 @@ export function renderNewScrape(
   onStart: (config: CrawlConfig) => void,
 ): void {
   const tauri = isTauri();
+  // Pull the persisted defaults (FR-SET-2). Falls back to DEFAULTS in browser
+  // mode / before settings load.
+  const settings = getSettings();
+  // The mirrors root the output folder is derived from; the folder picker can
+  // override it per-job.
+  let outRoot = settings.mirrorsRoot || "~/InterlinedList Offline";
 
   container.append(el("div", { class: "page-head" }, [el("h1", {}, ["New scrape"])]));
 
@@ -46,25 +54,48 @@ export function renderNewScrape(
     type: "url",
     placeholder: "https://example.com",
     autocomplete: "off",
+    "aria-label": "URL to capture",
   }) as HTMLInputElement;
-  const urlError = el("div", { class: "error-text" });
+  const urlError = el("div", { class: "error-text", role: "alert" });
 
   const pathPreview = el("div", { class: "readonly-path" }, [
-    "~/InterlinedList Offline/<host>/",
+    `${outRoot}/<host>/`,
   ]);
+  function currentHost(): string {
+    return urlInput.value.trim() ? hostOf(urlInput.value.trim()) : "<host>";
+  }
+  function refreshPathPreview(): void {
+    pathPreview.textContent = `${outRoot}/${currentHost()}/`;
+  }
   urlInput.addEventListener("input", () => {
-    const host = urlInput.value.trim() ? hostOf(urlInput.value.trim()) : "<host>";
-    pathPreview.textContent = `~/InterlinedList Offline/${host}/`;
+    refreshPathPreview();
     urlError.textContent = "";
   });
 
-  // ---- Scope toggle -------------------------------------------------------
-  let scope: "page" | "site" = "page";
-  const pageCard = el("div", { class: "choice selected" }, [
+  // Native "Change…" folder chooser for this job's output root (FR-OUT-1/2).
+  const outPathError = el("div", { class: "error-text", role: "alert" });
+  const changeFolderBtn = el(
+    "button",
+    { class: "btn small", type: "button", "aria-label": "Change save folder" },
+    ["Change…"],
+  ) as HTMLButtonElement;
+  if (!tauri) changeFolderBtn.disabled = true;
+  changeFolderBtn.addEventListener("click", async () => {
+    const picked = await pickFolder(outRoot);
+    if (picked) {
+      outRoot = picked;
+      outPathError.textContent = "";
+      refreshPathPreview();
+    }
+  });
+
+  // ---- Scope toggle (seeded from Settings → Defaults, FR-SET-2) -----------
+  let scope: "page" | "site" = settings.defaultScope === "site" ? "site" : "page";
+  const pageCard = el("div", { class: `choice${scope === "page" ? " selected" : ""}` }, [
     el("div", { class: "t" }, ["This page only"]),
     el("div", { class: "d" }, ["One page + its immediate assets"]),
   ]);
-  const siteCard = el("div", { class: "choice" }, [
+  const siteCard = el("div", { class: `choice${scope === "site" ? " selected" : ""}` }, [
     el("div", { class: "t" }, ["Whole site"]),
     el("div", { class: "d" }, ["Follows links within scope"]),
   ]);
@@ -74,10 +105,13 @@ export function renderNewScrape(
   const depthSelect = el("select", { class: "input" }) as HTMLSelectElement;
   for (const p of DEPTH_PRESETS) {
     const opt = el("option", { value: String(p.value) }, [p.label]) as HTMLOptionElement;
-    if (p.value === DEFAULTS.depth) opt.selected = true;
+    if (p.value === (settings.defaultDepth || DEFAULTS.depth)) opt.selected = true;
     depthSelect.append(opt);
   }
-  const depthField = el("div", { class: "field", style: "display:none" }, [
+  const depthField = el("div", {
+    class: "field",
+    style: scope === "site" ? "" : "display:none",
+  }, [
     el("label", {}, ["Depth (whole site only)"]),
     depthSelect,
   ]);
@@ -100,7 +134,7 @@ export function renderNewScrape(
     ["any", "Any domain (danger)"],
   ] as const) {
     const opt = el("option", { value: v }, [label]) as HTMLOptionElement;
-    if (v === DEFAULTS.domainScope) opt.selected = true;
+    if (v === (settings.defaultDomainScope || DEFAULTS.domainScope)) opt.selected = true;
     domainScope.append(opt);
   }
 
@@ -110,13 +144,16 @@ export function renderNewScrape(
     placeholder: "docs.example.com, cdn.example.com",
     autocomplete: "off",
   }) as HTMLInputElement;
-  const allowedField = el("div", { class: "field", style: "display:none" }, [
+  const allowedField = el("div", {
+    class: "field",
+    style: domainScope.value === "list" ? "" : "display:none",
+  }, [
     el("label", {}, ["Allowed domains (comma-separated)"]),
     allowedDomainsInput,
   ]);
   const anyDomainCaution = el(
     "div",
-    { class: "caution", style: "display:none" },
+    { class: "caution", style: domainScope.value === "any" ? "" : "display:none" },
     ["Any-domain crawls can wander across the whole web. Use with care."],
   );
   domainScope.addEventListener("change", () => {
@@ -124,16 +161,21 @@ export function renderNewScrape(
     anyDomainCaution.style.display = domainScope.value === "any" ? "" : "none";
   });
 
-  const rateInput = numInput(DEFAULTS.ratePerSec, "0.1", "5");
-  const concurrencyInput = numInput(DEFAULTS.concurrency, "1", "8");
+  const rateInput = numInput(settings.ratePerSec || DEFAULTS.ratePerSec, "0.1", "5");
+  const concurrencyInput = numInput(
+    settings.concurrency || DEFAULTS.concurrency,
+    "1",
+    "8",
+  );
 
-  let respectRobots = DEFAULTS.respectRobots;
+  const robotsDefault = settings.respectRobots ?? DEFAULTS.respectRobots;
+  let respectRobots = robotsDefault;
   const robotsRespect = el("label", { class: "radio" }, [
-    radio("robots", true, () => (respectRobots = true)),
+    radio("robots", robotsDefault, () => (respectRobots = true)),
     " Respect robots.txt (default)",
   ]);
   const robotsIgnore = el("label", { class: "radio" }, [
-    radio("robots", false, () => (respectRobots = false)),
+    radio("robots", !robotsDefault, () => (respectRobots = false)),
     " Ignore robots.txt",
   ]);
   const robotsCaution = el("div", { class: "caution" }, [
@@ -143,7 +185,7 @@ export function renderNewScrape(
   const uaInput = el("input", {
     class: "input",
     type: "text",
-    value: DEFAULTS.userAgent,
+    value: settings.userAgent || DEFAULTS.userAgent,
     autocomplete: "off",
   }) as HTMLInputElement;
 
@@ -155,8 +197,9 @@ export function renderNewScrape(
   // Opt-in; static (unchecked) is the default (FR-RENDER-1). Disabled with a
   // tooltip until we confirm a system browser exists (render_available), so the
   // option is honest about what the machine can actually do.
-  let render = false;
+  let render = settings.defaultRender ?? false;
   const renderCheckbox = el("input", { type: "checkbox" }) as HTMLInputElement;
+  renderCheckbox.checked = render;
   // Start disabled: enabled once the availability probe resolves true.
   renderCheckbox.disabled = true;
   renderCheckbox.addEventListener("change", () => {
@@ -240,8 +283,11 @@ export function renderNewScrape(
     depthField,
     el("div", { class: "field" }, [
       el("label", {}, ["Save to"]),
-      pathPreview,
-      el("div", { class: "hint", style: "margin-top:6px" }, ["Default location."]),
+      el("div", { class: "path-row" }, [pathPreview, changeFolderBtn]),
+      outPathError,
+      el("div", { class: "hint", style: "margin-top:6px" }, [
+        "The mirror is written to this folder. Change it per-job or set a new default in Settings → Storage.",
+      ]),
     ]),
     el("div", { class: "advanced" }, [advancedToggle, advancedBody]),
     el("div", { class: "fidelity-note" }, [
@@ -266,12 +312,13 @@ export function renderNewScrape(
     return null;
   }
 
-  startBtn.addEventListener("click", () => {
+  startBtn.addEventListener("click", async () => {
     const err = validate();
     if (err) {
       urlError.textContent = err;
       return;
     }
+    outPathError.textContent = "";
     const url = urlInput.value.trim();
     const allowedDomains = allowedDomainsInput.value
       .split(",")
@@ -284,7 +331,7 @@ export function renderNewScrape(
       depth: scope === "site" ? Number(depthSelect.value) : 0,
       domainScope: domainScope.value as CrawlConfig["domainScope"],
       allowedDomains,
-      outRoot: "~/InterlinedList Offline",
+      outRoot,
       ratePerSec: clampNum(rateInput.value, 0.1, 5, DEFAULTS.ratePerSec),
       concurrency: Math.round(clampNum(concurrencyInput.value, 1, 8, DEFAULTS.concurrency)),
       respectRobots,
@@ -296,6 +343,31 @@ export function renderNewScrape(
       maxSeconds: Math.round(clampNum(maxTimeInput.value, 1, 600, DEFAULTS.maxMinutes) * 60),
       render,
     };
+
+    // Validate the output folder is writable + has space before Start (FR-OUT-2).
+    // Block Start with an inline error if unwritable.
+    if (tauri) {
+      startBtn.disabled = true;
+      const prev = startBtn.textContent;
+      startBtn.textContent = "Checking folder…";
+      let check;
+      try {
+        check = await checkOutputPath(`${outRoot}/${currentHost()}`);
+      } finally {
+        startBtn.disabled = false;
+        startBtn.textContent = prev;
+      }
+      if (!check.writable) {
+        outPathError.textContent =
+          check.error ?? "That folder isn't writable. Pick a different location.";
+        return;
+      }
+      // Warn (don't block) when free space is known and tight vs. the size cap.
+      if (check.freeBytes > 0 && check.freeBytes < config.maxBytes) {
+        outPathError.textContent = `Low disk space at this location (${fmtGb(check.freeBytes)} free). The job may hit the disk-full cap.`;
+        // Non-blocking: fall through to the pre-flight / start.
+      }
+    }
 
     // Pre-flight confirm sheet (D2, FR-SET-3): shown ONLY when the job trips a
     // threshold. Small/safe jobs skip it and go straight to Progress.
@@ -343,11 +415,21 @@ function preflightCautions(c: CrawlConfig): string[] {
   const overSizeCap = c.maxBytes > DEFAULTS.maxBytesGb * 1024 * 1024 * 1024;
   const overTimeCap = c.maxSeconds > DEFAULTS.maxMinutes * 60;
   if (overPageCap || overSizeCap || overTimeCap) {
+    // Verbatim "Unlimited / no caps" caution from docs/acceptable-use.md
+    // (LG-TOS-2). Shown when the user raised any safety limit above the default.
     out.push(
-      "⚠ You raised the safety limits. This job could get large in pages, size, or time.",
+      "⚠ You removed the safety limits. This job has no page, size, or time cap and could get very large.",
     );
   }
   return out;
+}
+
+/** Compact GB label for the low-space warning. */
+function fmtGb(bytes: number): string {
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = bytes / (1024 * 1024);
+  return `${Math.round(mb)} MB`;
 }
 
 /** A one-sentence scope summary for the pre-flight header. */

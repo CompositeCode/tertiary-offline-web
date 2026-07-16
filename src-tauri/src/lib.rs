@@ -29,10 +29,14 @@
 
 mod auth;
 mod crawl;
+mod fsutil;
 mod render;
 mod scrape;
+mod settings;
 
 use auth::Session;
+use fsutil::{DiskUsage, PathCheck};
+use settings::AppSettings;
 use crawl::{
     CaptureReport, Controller, CrawlConfig, CrawlProgress, CrawlResult, JobSummary, PersistedJob,
     RescrapeOptions,
@@ -231,7 +235,7 @@ fn set_crawl_rate(
 /// Scan the mirrors root for persisted jobs so the Library survives restart.
 #[tauri::command]
 fn list_jobs(out_root: Option<String>) -> Vec<JobSummary> {
-    let root = out_root.unwrap_or_else(|| "~/InterlinedList Offline".to_string());
+    let root = out_root.unwrap_or_else(|| settings::load().mirrors_root);
     crawl::list_jobs(&root)
 }
 
@@ -279,7 +283,7 @@ fn mirror_files_present(job_dir: String) -> bool {
 /// strictly inside the mirrors root.
 #[tauri::command]
 fn delete_mirror(job_dir: String, out_root: Option<String>) -> Result<(), String> {
-    let root = out_root.unwrap_or_else(|| "~/InterlinedList Offline".to_string());
+    let root = out_root.unwrap_or_else(|| settings::load().mirrors_root);
     crawl::delete_mirror(&job_dir, &root)
 }
 
@@ -323,6 +327,55 @@ fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| format!("Could not open path: {e}"))
 }
 
+/// Reveal a file/folder in the platform file manager (Finder / Explorer /
+/// Files) — the native "Show in …" action (NFR-XPLAT-1). Falls back to opening
+/// the path if reveal isn't supported.
+#[tauri::command]
+fn reveal_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    match app.opener().reveal_item_in_dir(&path) {
+        Ok(()) => Ok(()),
+        Err(_) => app
+            .opener()
+            .open_path(path, None::<&str>)
+            .map_err(|e| format!("Could not reveal path: {e}")),
+    }
+}
+
+// ---- Settings + first-run ack (M5, FR-SET-1/2, LG-TOS-1) ----------------
+
+/// Load persisted app settings (defaults on a first run).
+#[tauri::command]
+fn get_settings() -> AppSettings {
+    settings::load()
+}
+
+/// Persist app settings (write-then-rename). Rejects with a message on failure.
+#[tauri::command]
+fn save_settings(settings: AppSettings) -> Result<(), String> {
+    settings::save(&settings)
+}
+
+/// Mark the first-run ToS acknowledgment seen (LG-TOS-1). Never re-prompt after.
+#[tauri::command]
+fn mark_acknowledged() -> Result<(), String> {
+    settings::mark_acknowledged()
+}
+
+// ---- Output-location validation + storage (FR-OUT-2, FR-SET-1) ----------
+
+/// Validate an output folder before Start: writability + free space (FR-OUT-2).
+#[tauri::command]
+fn check_output_path(path: String) -> PathCheck {
+    fsutil::check_output_path(&path)
+}
+
+/// Recursive disk usage of the mirrors root for the Storage settings tab.
+#[tauri::command]
+fn mirrors_disk_usage(root: Option<String>) -> DiskUsage {
+    let root = root.unwrap_or_else(|| settings::load().mirrors_root);
+    fsutil::disk_usage(&root)
+}
+
 /// Fire a native OS notification (best-effort — a missing permission is not an
 /// error worth surfacing).
 fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
@@ -356,12 +409,75 @@ fn spawn_offline_watcher(app: tauri::AppHandle) {
     });
 }
 
+/// Build the native application menu (NFR-XPLAT-1). Uses platform-standard
+/// accelerators: `CmdOrCtrl+N` (new scrape), `CmdOrCtrl+,` (settings/preferences
+/// — the macOS convention), plus a native Quit. On macOS the app submenu
+/// (About/Services/Hide/Quit) is added automatically; our items live under a
+/// "File" submenu. Menu clicks emit `menu://<id>` events the frontend routes.
+fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+
+    let new_scrape = MenuItemBuilder::with_id("new-scrape", "New scrape")
+        .accelerator("CmdOrCtrl+N")
+        .build(app)?;
+    let settings = MenuItemBuilder::with_id("settings", "Settings…")
+        .accelerator("CmdOrCtrl+,")
+        .build(app)?;
+
+    let file = SubmenuBuilder::new(app, "File")
+        .item(&new_scrape)
+        .item(&settings)
+        .separator()
+        .quit() // native platform Quit (labelled per-OS)
+        .build()?;
+
+    // Keep a standard Edit menu so copy/paste/select-all shortcuts work in the
+    // sign-in fields and text inputs (a11y / platform expectation).
+    let edit = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    MenuBuilder::new(app).item(&file).item(&edit).build()
+}
+
+/// Route native-menu clicks to the frontend via a `menu://<id>` event. The web
+/// layer listens and performs the same navigation as the in-app buttons, so the
+/// menu and the sidebar stay consistent.
+fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
+    let id = event.id().0.as_str();
+    match id {
+        "new-scrape" | "settings" => {
+            let _ = app.emit("menu://navigate", id.to_string());
+        }
+        _ => {}
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init());
+
+    // The updater plugin (Q10, NFR-XPLAT-1) is desktop-only. Its endpoints /
+    // signing pubkey come from `tauri.conf.json` (`plugins.updater`). Guarded so
+    // a mobile build (which has no updater) still compiles.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .manage(CrawlState::default())
+        .menu(build_menu)
+        .on_menu_event(handle_menu_event)
         .setup(|app| {
             spawn_offline_watcher(app.handle().clone());
             Ok(())
@@ -385,7 +501,13 @@ pub fn run() {
             delete_mirror,
             rescrape,
             render_available,
-            open_path
+            open_path,
+            reveal_path,
+            get_settings,
+            save_settings,
+            mark_acknowledged,
+            check_output_path,
+            mirrors_disk_usage
         ])
         .run(tauri::generate_context!())
         .expect("error while running InterlinedList Offline");
