@@ -64,6 +64,12 @@ pub struct CrawlConfig {
     /// Output root; `<host>/` is appended. `~` is expanded.
     #[serde(default = "default_out_root")]
     pub out_root: String,
+    /// Explicit output dir (used verbatim, `~` expanded) when set. Overrides the
+    /// `<out_root>/<host>` layout — used by re-scrape to land a non-destructive
+    /// capture in a dated sibling folder (`<host>-YYYYMMDD-HHMMSS`). When absent
+    /// the default `<out_root>/<host>` layout applies (M1/M2 behaviour).
+    #[serde(default)]
+    pub out_dir_override: Option<String>,
 
     // Politeness ------------------------------------------------------------
     /// Requests/sec per host (default 1).
@@ -599,8 +605,12 @@ struct RobotsInfo {
 
 // ----- Entry point --------------------------------------------------------
 
-/// Resolve the output dir for a config: `<out_root>/<host>/`.
+/// Resolve the output dir for a config: an explicit `out_dir_override` when set
+/// (re-scrape dated folders), else the default `<out_root>/<host>/`.
 pub fn output_dir_for(cfg: &CrawlConfig) -> Result<PathBuf, String> {
+    if let Some(dir) = cfg.out_dir_override.as_ref().filter(|s| !s.trim().is_empty()) {
+        return Ok(expand_home(dir));
+    }
     let seed = Url::parse(cfg.url.trim()).map_err(|_| "Invalid URL.".to_string())?;
     let host = seed.host_str().ok_or_else(|| "URL has no host.".to_string())?;
     Ok(expand_home(&cfg.out_root).join(host))
@@ -639,8 +649,9 @@ where
         .unwrap_or_else(default_user_agent);
     let http = build_client(&user_agent)?;
 
-    // Output dir: <out_root>/<host>/
-    let out_dir = expand_home(&cfg.out_root).join(&seed_host);
+    // Output dir: <out_root>/<host>/ by default, or an explicit override
+    // (re-scrape dated folder).
+    let out_dir = output_dir_for(&cfg)?;
     std::fs::create_dir_all(&out_dir)
         .map_err(|e| format!("Could not create output folder: {e}"))?;
 
@@ -800,6 +811,21 @@ where
     // Finalize inter-page links + write pages. On pause we still finalize what's
     // captured so the partial mirror is browsable; unfetched frontier persists.
     finalize(&mut guard);
+
+    // Finalize-all pass (FR-ASSET-2): at job completion — including after a
+    // resume completes — re-read EVERY captured page file and rewrite its links
+    // against the full captured set. This fixes cross-segment links: a page
+    // written in an earlier run segment (before some target was captured in a
+    // later segment) still holds an absolute href; this pass rewrites it to the
+    // local relative path now that the target exists.
+    //
+    // Runs for every TERMINAL outcome (done / capped / stopped) so the whole
+    // mirror is internally consistent. A mid-run pause (paused / offline /
+    // session-expired / disk-full) skips it — the partial links stay as-is and
+    // the pass runs when the resumed job finally completes.
+    if !paused {
+        finalize_all(&mut guard);
+    }
 
     let elapsed = guard.base_elapsed + started.elapsed().as_secs();
     let final_status = guard.status.clone();
@@ -1535,6 +1561,64 @@ fn finalize(g: &mut Shared) {
     }
 }
 
+/// Finalize-all pass: at job completion, re-read every captured page file on
+/// disk and rewrite its links so ALL captured→captured links resolve locally,
+/// regardless of which run segment wrote the page (FR-ASSET-2).
+///
+/// Why this exists: `finalize` only rewrites the pages captured in the CURRENT
+/// segment (`pending_rewrites`). On a resumed job, pages written in an earlier
+/// segment were rewritten against only the targets captured up to that point —
+/// links to pages captured LATER stayed absolute. This pass reconciles the whole
+/// mirror at the end: it loads each captured page from disk and rewrites every
+/// captured target's href to a page-relative local path. Uncaptured / off-scope
+/// targets are never in `captured`, so their hrefs stay absolute (FR-ASSET-2).
+///
+/// Idempotent: a link already rewritten to its local relative form won't match
+/// the absolute/root-relative candidate spellings, so re-running is a no-op.
+fn finalize_all(g: &mut Shared) {
+    // Snapshot the captured set (norm url -> local path) so we can borrow `g`
+    // freely inside the loop.
+    let captured: Vec<(String, String)> = g
+        .captured
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let out_dir = g.out_dir.clone();
+
+    for (norm_page, page_local) in &captured {
+        let abs_path = out_dir.join(page_local);
+        let Ok(mut html) = std::fs::read_to_string(&abs_path) else {
+            continue;
+        };
+        let Ok(page_url) = Url::parse(&reconstruct(norm_page)) else {
+            continue;
+        };
+        let from_dir = parent_rel(page_local);
+        let original = html.clone();
+
+        for (norm_target, target_local) in &captured {
+            if norm_target == norm_page {
+                continue;
+            }
+            let rel = relative_path(&from_dir, target_local);
+            if let Ok(target_url) = Url::parse(&reconstruct(norm_target)) {
+                for candidate in href_candidates(&page_url, &target_url) {
+                    // Skip the already-local spelling so re-runs are idempotent.
+                    if candidate == rel {
+                        continue;
+                    }
+                    html = scrape::replace_attr_value(&html, &candidate, &rel);
+                }
+            }
+        }
+
+        // Only touch disk when the page actually changed.
+        if html != original {
+            let _ = std::fs::write(&abs_path, html.as_bytes());
+        }
+    }
+}
+
 fn local_of(g: &Shared, url: &Url) -> String {
     g.captured
         .get(&normalize(url))
@@ -1624,4 +1708,394 @@ impl CrawlConfig {
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(default_user_agent)
     }
+}
+
+// ==========================================================================
+// M3 — Capture report, re-scrape, delete, files-not-found
+// ==========================================================================
+
+// ----- Capture report (FR-REPORT-1/2/3) -----------------------------------
+
+/// A structured capture report built from the persisted manifest. Captured
+/// totals vs. skipped grouped by reason (each with a plain-language explanation
+/// and, where one exists, an inline remedy), plus fidelity notes.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureReport {
+    pub host: String,
+    pub url: String,
+    pub status: String,
+    pub stop_reason: String,
+    /// True when the mirror's files still exist on disk (FR-RES-4).
+    pub files_present: bool,
+    /// Captured totals.
+    pub pages: u32,
+    pub assets: u32,
+    pub failed_assets: u32,
+    pub total_bytes: u64,
+    /// Skips grouped by reason, each explained + optionally remedied.
+    pub skip_groups: Vec<SkipGroup>,
+    /// Total skipped/failed items across all groups.
+    pub total_skipped: u32,
+    /// Plain-language fidelity notes (what likely won't work offline).
+    pub fidelity_notes: Vec<String>,
+    /// True when this looks like a zero-capture job (nothing was captured).
+    pub zero_capture: bool,
+    /// The single most likely fix for a zero-capture job (empty otherwise).
+    pub top_fix: Option<InlineFix>,
+    /// Whether the job can still be resumed (queued work remains).
+    pub resumable: bool,
+}
+
+/// One skip reason group with count, explanation, and optional inline remedy.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SkipGroup {
+    /// Machine reason key (e.g. `robots-blocked`).
+    pub reason: String,
+    /// Human label (e.g. "Blocked by robots.txt").
+    pub label: String,
+    pub count: u32,
+    /// Plain-language explanation of why these were skipped.
+    pub explanation: String,
+    /// Inline remedy where one exists (Re-scrape with rendering / more depth / …).
+    pub fix: Option<InlineFix>,
+    /// A few example URLs from this group (capped) for the expandable UI.
+    pub examples: Vec<String>,
+}
+
+/// An inline remedy the Results/report UI can wire to a button. `action` is a
+/// stable key the frontend maps to a re-scrape config tweak.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InlineFix {
+    /// `render-js` | `increase-depth` | `allow-subdomains` | `ignore-robots` |
+    /// `raise-caps` | `re-scrape`.
+    pub action: String,
+    /// Button label, e.g. "Re-scrape with JavaScript rendering".
+    pub label: String,
+}
+
+/// Build a capture report for a persisted job living at `job_dir`
+/// (FR-REPORT-1/2). Reuses `<job_dir>/.iloffline/job.json`.
+pub fn job_report(job_dir: &str) -> Result<CaptureReport, String> {
+    let p = load_persisted(job_dir)?;
+    let host = Url::parse(&p.config.url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_string()))
+        .unwrap_or_else(|| p.config.url.clone());
+
+    // Group skipped/failed items by reason.
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    let mut examples: HashMap<String, Vec<String>> = HashMap::new();
+    for it in &p.items {
+        if it.status == "captured" {
+            continue;
+        }
+        *counts.entry(it.reason.clone()).or_insert(0) += 1;
+        let ex = examples.entry(it.reason.clone()).or_default();
+        if ex.len() < 5 {
+            ex.push(it.url.clone());
+        }
+    }
+    // Fall back to the reasons counter for anything not itemized.
+    for (reason, n) in &p.reasons {
+        counts.entry(reason.clone()).or_insert(*n);
+    }
+
+    let mut skip_groups: Vec<SkipGroup> = counts
+        .into_iter()
+        .map(|(reason, count)| {
+            let (label, explanation, fix) = explain_reason(&reason, &p.config);
+            SkipGroup {
+                reason: reason.clone(),
+                label,
+                count,
+                explanation,
+                fix,
+                examples: examples.remove(&reason).unwrap_or_default(),
+            }
+        })
+        .collect();
+    // Stable, sensible order: biggest groups first.
+    skip_groups.sort_by(|a, b| b.count.cmp(&a.count).then(a.reason.cmp(&b.reason)));
+    let total_skipped: u32 = skip_groups.iter().map(|g| g.count).sum();
+
+    let files_present = mirror_files_present(job_dir);
+    let zero_capture = p.pages_done == 0;
+    let resumable = !p.frontier.is_empty()
+        && matches!(
+            p.status.as_str(),
+            "paused" | "offline" | "session-expired" | "disk-full" | "running" | "stopped" | "capped"
+        );
+
+    let top_fix = if zero_capture {
+        Some(top_fix_for(&skip_groups, &p.config))
+    } else {
+        None
+    };
+
+    Ok(CaptureReport {
+        host,
+        url: p.config.url.clone(),
+        status: p.status.clone(),
+        stop_reason: p.stop_reason.clone(),
+        files_present,
+        pages: p.pages_done,
+        assets: p.asset_count,
+        failed_assets: p.failed_asset_count,
+        total_bytes: p.bytes_downloaded,
+        skip_groups,
+        total_skipped,
+        fidelity_notes: fidelity_notes(),
+        zero_capture,
+        top_fix,
+        resumable,
+    })
+}
+
+/// Plain-language label + explanation + optional inline fix for a skip reason.
+fn explain_reason(reason: &str, cfg: &CrawlConfig) -> (String, String, Option<InlineFix>) {
+    match reason {
+        R_ROBOTS => (
+            "Blocked by robots.txt".to_string(),
+            "The site asks automated tools not to fetch these pages. We respected that and skipped them.".to_string(),
+            if cfg.respect_robots {
+                Some(InlineFix { action: "ignore-robots".to_string(), label: "Re-scrape ignoring robots.txt".to_string() })
+            } else {
+                None
+            },
+        ),
+        R_OFF_SCOPE => (
+            "Off-scope links".to_string(),
+            "These links point outside the domain scope you set, so they weren't followed.".to_string(),
+            match cfg.domain_scope.as_str() {
+                "same" => Some(InlineFix { action: "allow-subdomains".to_string(), label: "Re-scrape including subdomains".to_string() }),
+                _ => None,
+            },
+        ),
+        R_TOO_LARGE => (
+            "Too large".to_string(),
+            "These responses exceeded the size limit and were skipped.".to_string(),
+            Some(InlineFix { action: "raise-caps".to_string(), label: "Re-scrape with higher limits".to_string() }),
+        ),
+        R_TIMEOUT => (
+            "Timed out".to_string(),
+            "These pages didn't respond in time. A slower rate or a retry often helps.".to_string(),
+            Some(InlineFix { action: "re-scrape".to_string(), label: "Re-scrape".to_string() }),
+        ),
+        R_BLOCKED => (
+            "Rate-limited (backed off)".to_string(),
+            "The site limited our requests (HTTP 429/403). We backed off; a lower rate helps.".to_string(),
+            Some(InlineFix { action: "re-scrape".to_string(), label: "Re-scrape".to_string() }),
+        ),
+        R_CONNECT => (
+            "Connection failed".to_string(),
+            "We couldn't reach these URLs (DNS / connection error). Check the network and retry.".to_string(),
+            Some(InlineFix { action: "re-scrape".to_string(), label: "Re-scrape".to_string() }),
+        ),
+        "needs-js" | "js-only" => (
+            "Needs JavaScript".to_string(),
+            "These pages render their content with JavaScript, so the static snapshot came up nearly empty.".to_string(),
+            Some(InlineFix { action: "render-js".to_string(), label: "Re-scrape with JavaScript rendering".to_string() }),
+        ),
+        R_HTTP_ERROR => (
+            "HTTP error".to_string(),
+            "The server returned an error (e.g. 404/500) for these URLs.".to_string(),
+            None,
+        ),
+        other => (other.to_string(), "These items were skipped.".to_string(), None),
+    }
+}
+
+/// Pick the single most likely fix for a zero-capture job (FR-RES-5). Prefers a
+/// robots override when everything was robots-blocked, else the biggest group's
+/// remedy, else a plain re-scrape.
+fn top_fix_for(groups: &[SkipGroup], _cfg: &CrawlConfig) -> InlineFix {
+    // Groups are sorted biggest-first; use the biggest group's remedy if any.
+    for g in groups {
+        if let Some(fix) = &g.fix {
+            return fix.clone();
+        }
+    }
+    InlineFix { action: "re-scrape".to_string(), label: "Re-scrape".to_string() }
+}
+
+/// The standard fidelity notes surfaced in every report (FR-REPORT-2).
+fn fidelity_notes() -> Vec<String> {
+    vec![
+        "Server-side search boxes won't return results offline.".to_string(),
+        "Login areas and anything behind an account won't work.".to_string(),
+        "Live or streamed content (feeds, video, chat) is frozen or missing.".to_string(),
+        "Some interactive JavaScript features may not work in a static snapshot.".to_string(),
+    ]
+}
+
+// ----- Files-not-found detection (FR-RES-4) -------------------------------
+
+/// True when a mirror's captured files still exist on disk. We check the entry
+/// `index.html`; if it's gone the files were moved/deleted outside the app and
+/// Results should show the "files not found" recovery state rather than crash.
+pub fn mirror_files_present(job_dir: &str) -> bool {
+    let dir = std::path::Path::new(job_dir);
+    // The job dir itself must exist and the entry index must be readable.
+    dir.join("index.html").is_file()
+}
+
+// ----- Delete mirror (FR-RES-2) -------------------------------------------
+
+/// Safely delete a capture folder. Validates the path is a subdirectory of the
+/// mirrors root (`out_root`) and never deletes the root itself or anything
+/// outside it — a guard against a bad/mistyped path removing arbitrary folders.
+pub fn delete_mirror(job_dir: &str, out_root: &str) -> Result<(), String> {
+    let root = expand_home(out_root);
+    let target = std::path::Path::new(job_dir);
+
+    // Canonicalize the root (must exist). For the target, canonicalize if it
+    // exists; otherwise resolve against the (canonical) root by components so a
+    // non-existent path can still be range-checked.
+    let root_canon = root
+        .canonicalize()
+        .map_err(|_| "Mirrors folder not found — nothing to delete.".to_string())?;
+
+    let target_canon = match target.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return Err("This mirror folder doesn't exist.".to_string()),
+    };
+
+    // Refuse to delete the root itself.
+    if target_canon == root_canon {
+        return Err("Refusing to delete the mirrors root folder.".to_string());
+    }
+    // Must be strictly inside the mirrors root.
+    if !target_canon.starts_with(&root_canon) {
+        return Err("Refusing to delete a folder outside the mirrors folder.".to_string());
+    }
+    if !target_canon.is_dir() {
+        return Err("That mirror path is not a folder.".to_string());
+    }
+
+    std::fs::remove_dir_all(&target_canon)
+        .map_err(|e| format!("Could not delete the mirror: {e}"))
+}
+
+// ----- Re-scrape (Q12 — new dated capture, non-destructive) ---------------
+
+/// Options for re-scraping an existing job (FR-OUT-3, Q12).
+#[derive(Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RescrapeOptions {
+    /// When true, overwrite the ORIGINAL capture folder in place (destructive).
+    /// Default (false) creates a new dated capture folder — non-destructive.
+    #[serde(default)]
+    pub overwrite: bool,
+    /// Optional config overrides applied to the reused settings before running
+    /// (used by inline fixes: render-js, increase-depth, allow-subdomains, …).
+    #[serde(default)]
+    pub overrides: Option<ConfigOverrides>,
+}
+
+/// A partial set of config overrides an inline fix can request. Only the set
+/// fields are applied; the rest are inherited from the original job's config.
+#[derive(Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigOverrides {
+    pub scope: Option<String>,
+    pub depth: Option<u32>,
+    pub domain_scope: Option<String>,
+    pub respect_robots: Option<bool>,
+    pub max_pages: Option<u32>,
+    pub max_bytes: Option<u64>,
+    pub max_seconds: Option<u64>,
+}
+
+/// A dated capture folder name for the re-scrape scheme:
+/// `<host>-YYYYMMDD-HHMMSS`. Kept as a sibling of the original `<host>/` folder
+/// under the mirrors root so Library lists each capture distinctly.
+fn dated_capture_name(host: &str) -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Format YYYYMMDD-HHMMSS from a unix timestamp without pulling in chrono.
+    let (y, mo, d, h, mi, s) = civil_from_unix(secs);
+    format!("{host}-{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}")
+}
+
+/// Convert a unix timestamp (UTC) to civil (y, m, d, h, min, s). Days-from-epoch
+/// algorithm (Howard Hinnant), no external crate.
+fn civil_from_unix(secs: u64) -> (i64, u32, u32, u32, u32, u32) {
+    let days = (secs / 86_400) as i64;
+    let rem = (secs % 86_400) as u32;
+    let h = rem / 3600;
+    let mi = (rem % 3600) / 60;
+    let s = rem % 60;
+
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as i64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let year = if m <= 2 { y + 1 } else { y };
+    (year, m, d, h, mi, s)
+}
+
+/// Build the `CrawlConfig` for a re-scrape: reuse the original job's settings,
+/// apply any inline-fix overrides, and target either a new dated capture folder
+/// (default, non-destructive — Q12) or the original folder in place (overwrite).
+///
+/// Non-destructive scheme (default): the new capture lands in a dated sibling
+/// folder under the mirrors root — `<out_root>/<host>-YYYYMMDD-HHMMSS/` — set via
+/// `out_dir_override`. Library's one-level scan picks it up as a distinct row.
+///
+/// Overwrite: keep the original `<out_root>/<host>/` folder and clear its
+/// persisted state so the run starts clean rather than resuming.
+pub fn rescrape_config(job_dir: &str, opts: &RescrapeOptions) -> Result<CrawlConfig, String> {
+    let p = load_persisted(job_dir)?;
+    let mut cfg = p.config.clone();
+
+    // Apply inline-fix overrides (render-js, increase-depth, allow-subdomains…).
+    if let Some(ov) = &opts.overrides {
+        if let Some(v) = &ov.scope {
+            cfg.scope = v.clone();
+        }
+        if let Some(v) = ov.depth {
+            cfg.depth = v;
+        }
+        if let Some(v) = &ov.domain_scope {
+            cfg.domain_scope = v.clone();
+        }
+        if let Some(v) = ov.respect_robots {
+            cfg.respect_robots = v;
+        }
+        if let Some(v) = ov.max_pages {
+            cfg.max_pages = v;
+        }
+        if let Some(v) = ov.max_bytes {
+            cfg.max_bytes = v;
+        }
+        if let Some(v) = ov.max_seconds {
+            cfg.max_seconds = v;
+        }
+    }
+
+    if opts.overwrite {
+        // Overwrite in place: write back to the ORIGINAL folder. Clear its state
+        // + captured files so the run starts clean rather than resuming.
+        cfg.out_dir_override = Some(job_dir.to_string());
+        let _ = std::fs::remove_dir_all(std::path::Path::new(job_dir).join(JOB_STATE_SUBDIR));
+        return Ok(cfg);
+    }
+
+    // Non-destructive: land the new capture in a dated sibling folder.
+    let seed = Url::parse(cfg.url.trim()).map_err(|_| "Invalid URL.".to_string())?;
+    let host = seed.host_str().ok_or_else(|| "URL has no host.".to_string())?;
+    let dated = dated_capture_name(host);
+    let dated_dir = expand_home(&cfg.out_root).join(&dated);
+    cfg.out_dir_override = Some(path_string(&dated_dir));
+    Ok(cfg)
 }

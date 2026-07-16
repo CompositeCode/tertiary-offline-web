@@ -1,7 +1,7 @@
 import { el } from "../dom";
 import { logoSvg, WORDMARK } from "../brand";
 import { getSession, signOut } from "../auth";
-import { isTauri, type CrawlConfig } from "../tauri";
+import { isTauri, deleteMirror, type CrawlConfig, type RescrapeOptions } from "../tauri";
 import type { Route } from "../main";
 import { route } from "../main";
 import { renderLibrary } from "./library";
@@ -23,8 +23,12 @@ export function setLastMirror(m: Mirror): void {
  * fresh crawl for `config`. Set by `enterProgress` before switching to the
  * "progress" route.
  */
-let pendingJob: { config: CrawlConfig; resumeFrom?: string; reattach?: boolean } | null =
-  null;
+let pendingJob: {
+  config: CrawlConfig;
+  resumeFrom?: string;
+  reattach?: boolean;
+  rescrapeFrom?: { jobDir: string; options?: RescrapeOptions };
+} | null = null;
 
 /**
  * A pending re-auth resume callback: set when a running job auto-pauses on
@@ -129,6 +133,43 @@ export function renderShell(root: HTMLElement, current: Route): void {
     renderShell(root, "progress");
   };
 
+  // Enter Progress in re-scrape mode: re-run an existing job's settings into a
+  // new dated capture (default) or overwrite in place (FR-OUT-3 / Q12).
+  const enterRescrape = (m: Mirror, options?: RescrapeOptions) => {
+    if (!m.jobDir) return;
+    pendingJob = {
+      config: configFromMirror(m),
+      rescrapeFrom: { jobDir: m.jobDir, options },
+    };
+    renderShell(root, "progress");
+  };
+
+  // Delete a mirror (FR-RES-2), then return to Library.
+  const deleteAndReturn = async (m: Mirror) => {
+    if (m.jobDir) {
+      try {
+        await deleteMirror(m.jobDir);
+      } catch (e) {
+        // Surface the guard error briefly; stay on Results.
+        alert(typeof e === "string" ? e : "Could not delete this mirror.");
+        return;
+      }
+    }
+    if (lastMirror?.jobDir === m.jobDir) lastMirror = null;
+    renderShell(root, "library");
+  };
+
+  const resultsActions = (m: Mirror) => ({
+    onNewScrape: () => renderShell(root, "new-scrape"),
+    onRescrape: (mm: Mirror, options?: RescrapeOptions) => enterRescrape(mm, options),
+    onResume: (mm: Mirror) => enterProgress(configFromMirror(mm), mm.jobDir),
+    onDelete: (mm: Mirror) => void deleteAndReturn(mm),
+    onReload: () => {
+      setLastMirror(m);
+      renderShell(root, "results");
+    },
+  });
+
   // Session-expired handoff: stash a resume-after-reauth callback and route to
   // Sign-in (FR-AUTH-5). The paused job stays alive in-process; on successful
   // sign-in we re-enter Progress in reattach mode, which un-parks it and follows
@@ -152,7 +193,7 @@ export function renderShell(root: HTMLElement, current: Route): void {
   } else if (current === "new-scrape") {
     renderNewScrape(contentInner, goResults, enterProgress);
   } else if (current === "progress" && pendingJob) {
-    const { config, resumeFrom, reattach } = pendingJob;
+    const { config, resumeFrom, reattach, rescrapeFrom } = pendingJob;
     pendingJob = null;
     renderProgress(
       contentInner,
@@ -162,9 +203,10 @@ export function renderShell(root: HTMLElement, current: Route): void {
       onSessionExpired,
       resumeFrom,
       reattach,
+      rescrapeFrom,
     );
   } else if (current === "results" && lastMirror) {
-    renderResults(contentInner, lastMirror, () => renderShell(root, "new-scrape"));
+    renderResults(contentInner, lastMirror, resultsActions(lastMirror));
   } else {
     renderLibrary(
       contentInner,

@@ -249,8 +249,103 @@ export function renderNewScrape(
       maxSeconds: Math.round(clampNum(maxTimeInput.value, 1, 600, DEFAULTS.maxMinutes) * 60),
     };
 
-    onStart(config);
+    // Pre-flight confirm sheet (D2, FR-SET-3): shown ONLY when the job trips a
+    // threshold. Small/safe jobs skip it and go straight to Progress.
+    const cautions = preflightCautions(config);
+    if (cautions.length > 0) {
+      openPreflight(config, cautions, () => onStart(config));
+    } else {
+      onStart(config);
+    }
   });
+}
+
+// ---- Pre-flight (D2) -----------------------------------------------------
+
+/** Depth beyond which a whole-site crawl counts as "deep" for the pre-flight. */
+const DEEP_DEPTH = 4;
+
+/**
+ * Decide whether a job trips a pre-flight threshold and, if so, produce the
+ * targeted caution line(s) (FR-SET-3, LG-TOS-2). Returns an empty array for a
+ * small/safe job (no sheet shown). Copy lifted from docs/acceptable-use.md.
+ */
+function preflightCautions(c: CrawlConfig): string[] {
+  const out: string[] = [];
+  const wholeSiteDeep = c.scope === "site" && c.depth >= DEEP_DEPTH;
+  if (wholeSiteDeep) {
+    out.push(
+      "This is a whole-site crawl going several levels deep — it could capture a lot of pages.",
+    );
+  }
+  if (!c.respectRobots) {
+    out.push(
+      "⚠ You chose to ignore robots.txt for this job. Make sure you have the right to mirror these pages.",
+    );
+  }
+  if (c.domainScope === "any") {
+    out.push(
+      "⚠ You allowed any domain. This job can follow links off the original site — only do this for content you're allowed to mirror.",
+    );
+  } else if (c.domainScope === "subdomains" || c.domainScope === "list") {
+    out.push("This job may cross into other domains you allowed.");
+  }
+  // Estimate over the safety caps: treat generous caps as "over the limit".
+  const overPageCap = c.maxPages > DEFAULTS.maxPages;
+  const overSizeCap = c.maxBytes > DEFAULTS.maxBytesGb * 1024 * 1024 * 1024;
+  const overTimeCap = c.maxSeconds > DEFAULTS.maxMinutes * 60;
+  if (overPageCap || overSizeCap || overTimeCap) {
+    out.push(
+      "⚠ You raised the safety limits. This job could get large in pages, size, or time.",
+    );
+  }
+  return out;
+}
+
+/** A one-sentence scope summary for the pre-flight header. */
+function scopeSentence(c: CrawlConfig): string {
+  const scopeStr = c.scope === "site" ? "Whole site" : "This page only";
+  const domain =
+    c.domainScope === "same"
+      ? "same domain"
+      : c.domainScope === "subdomains"
+        ? "including subdomains"
+        : c.domainScope === "list"
+          ? "specific domains"
+          : "any domain";
+  const depthStr = c.scope === "site" ? ` · depth ${c.depth}` : "";
+  return `${scopeStr}${depthStr} · ${domain}`;
+}
+
+/** Show the pre-flight confirm sheet with Start anyway / Adjust (FR-SET-3). */
+function openPreflight(c: CrawlConfig, cautions: string[], onConfirm: () => void): void {
+  const overlay = el("div", { class: "sheet-overlay" });
+  const close = () => overlay.remove();
+
+  const cautionEls = cautions.map((line) =>
+    el("div", { class: line.startsWith("⚠") ? "caution" : "hint" }, [line]),
+  );
+
+  const startBtn = el("button", { class: "btn accent block" }, ["Start anyway"]);
+  startBtn.addEventListener("click", () => {
+    close();
+    onConfirm();
+  });
+  const adjustBtn = el("button", { class: "btn ghost block" }, ["Adjust settings"]);
+  adjustBtn.addEventListener("click", close);
+
+  const sheet = el("div", { class: "sheet" }, [
+    el("h2", { class: "sheet-title" }, ["Before we start"]),
+    el("div", { class: "preflight-scope" }, [scopeSentence(c)]),
+    ...cautionEls,
+    startBtn,
+    adjustBtn,
+  ]);
+  overlay.append(sheet);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  document.body.append(overlay);
 }
 
 // ---- Small builders -----------------------------------------------------

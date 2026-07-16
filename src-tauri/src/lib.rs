@@ -15,6 +15,10 @@
 //!  - `list_jobs`       : scan the mirrors root for persisted jobs (M2)
 //!  - `load_job`        : read one persisted job's full state (M2)
 //!  - `check_session`   : validate the IL session; auto-pause on expiry (M2)
+//!  - `job_report`      : structured capture report from the manifest (M3)
+//!  - `mirror_files_present` : detect files moved/deleted outside the app (M3)
+//!  - `delete_mirror`   : safely delete a capture folder (within root) (M3)
+//!  - `rescrape`        : re-run a job into a new dated capture / overwrite (M3)
 //!  - `open_path`       : reveal/open a file or folder
 //!
 //! Job model (v1: one job at a time — Q8): a running crawl registers a
@@ -28,7 +32,10 @@ mod crawl;
 mod scrape;
 
 use auth::Session;
-use crawl::{Controller, CrawlConfig, CrawlProgress, CrawlResult, JobSummary, PersistedJob};
+use crawl::{
+    CaptureReport, Controller, CrawlConfig, CrawlProgress, CrawlResult, JobSummary, PersistedJob,
+    RescrapeOptions,
+};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -252,6 +259,53 @@ fn check_session(app: tauri::AppHandle) -> bool {
     valid
 }
 
+/// Build a capture report from a persisted job's manifest (FR-REPORT-1/2/3).
+/// Captured totals vs. skipped grouped + explained, fidelity notes, inline
+/// fixes, files-present flag, and zero-capture diagnosis.
+#[tauri::command]
+fn job_report(job_dir: String) -> Result<CaptureReport, String> {
+    crawl::job_report(&job_dir)
+}
+
+/// Check whether a mirror's captured files still exist on disk (FR-RES-4). False
+/// means the files were moved/deleted outside the app → Results shows recovery.
+#[tauri::command]
+fn mirror_files_present(job_dir: String) -> bool {
+    crawl::mirror_files_present(&job_dir)
+}
+
+/// Delete a capture folder safely (FR-RES-2). Refuses any path that isn't
+/// strictly inside the mirrors root.
+#[tauri::command]
+fn delete_mirror(job_dir: String, out_root: Option<String>) -> Result<(), String> {
+    let root = out_root.unwrap_or_else(|| "~/InterlinedList Offline".to_string());
+    crawl::delete_mirror(&job_dir, &root)
+}
+
+/// Re-scrape a job (FR-OUT-3, Q12). Reuses the original settings (plus any
+/// inline-fix overrides) and runs into a NEW dated capture folder by default
+/// (non-destructive), or overwrites the original in place when
+/// `options.overwrite` is set. Behaves like `start_crawl`: runs off-thread,
+/// emits `crawl://progress`, resolves with the final `CrawlResult`.
+#[tauri::command]
+fn rescrape(
+    app: tauri::AppHandle,
+    job_dir: String,
+    options: Option<RescrapeOptions>,
+) -> Result<CrawlResult, String> {
+    let opts = options.unwrap_or_default();
+    let config = crawl::rescrape_config(&job_dir, &opts)?;
+    let out_dir = crawl::output_dir_for(&config)?;
+    let controller = Controller::new(
+        out_dir,
+        config.url.clone(),
+        config.rate_per_sec,
+        config.concurrency,
+    );
+    register_active(&app, &controller)?;
+    drive_crawl(app, config, controller, None)
+}
+
 /// Open/reveal a file or folder in the OS default handler.
 #[tauri::command]
 fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
@@ -317,6 +371,10 @@ pub fn run() {
             list_jobs,
             load_job,
             check_session,
+            job_report,
+            mirror_files_present,
+            delete_mirror,
+            rescrape,
             open_path
         ])
         .run(tauri::generate_context!())

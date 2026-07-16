@@ -43,6 +43,8 @@ export interface CrawlConfig {
   domainScope: "same" | "subdomains" | "list" | "any";
   allowedDomains: string[];
   outRoot: string;
+  /** Explicit output dir (re-scrape dated folders); default layout otherwise. */
+  outDirOverride?: string;
   ratePerSec: number;
   concurrency: number;
   respectRobots: boolean;
@@ -246,6 +248,92 @@ export function loadJob(jobDir: string): Promise<PersistedJob> {
 export async function checkSession(): Promise<boolean> {
   if (!isTauri()) return true;
   return invokeCmd<boolean>("check_session");
+}
+
+// ---- Capture report + re-scrape + delete (M3) --------------------------
+
+/** An inline remedy the report/Results UI can wire to a re-scrape. */
+export interface InlineFix {
+  /**
+   * `render-js` | `increase-depth` | `allow-subdomains` | `ignore-robots` |
+   * `raise-caps` | `re-scrape`.
+   */
+  action: string;
+  label: string;
+}
+
+/** One skip-reason group with count, explanation, examples, optional fix. */
+export interface SkipGroup {
+  reason: string;
+  label: string;
+  count: number;
+  explanation: string;
+  fix: InlineFix | null;
+  examples: string[];
+}
+
+/** Structured capture report (from `job_report`). */
+export interface CaptureReport {
+  host: string;
+  url: string;
+  status: CrawlStatus;
+  stopReason: string;
+  filesPresent: boolean;
+  pages: number;
+  assets: number;
+  failedAssets: number;
+  totalBytes: number;
+  skipGroups: SkipGroup[];
+  totalSkipped: number;
+  fidelityNotes: string[];
+  zeroCapture: boolean;
+  topFix: InlineFix | null;
+  resumable: boolean;
+}
+
+/** Partial config overrides an inline fix can request for a re-scrape. */
+export interface ConfigOverrides {
+  scope?: "page" | "site";
+  depth?: number;
+  domainScope?: "same" | "subdomains" | "list" | "any";
+  respectRobots?: boolean;
+  maxPages?: number;
+  maxBytes?: number;
+  maxSeconds?: number;
+}
+
+/** Options for `rescrape`: overwrite-in-place (else new dated capture) + fixes. */
+export interface RescrapeOptions {
+  overwrite?: boolean;
+  overrides?: ConfigOverrides;
+}
+
+/** Build a capture report from a persisted job's manifest (FR-REPORT-1/2/3). */
+export function jobReport(jobDir: string): Promise<CaptureReport> {
+  return invokeCmd<CaptureReport>("job_report", { jobDir });
+}
+
+/** Check whether a mirror's captured files still exist on disk (FR-RES-4). */
+export async function mirrorFilesPresent(jobDir: string): Promise<boolean> {
+  if (!isTauri()) return true;
+  return invokeCmd<boolean>("mirror_files_present", { jobDir });
+}
+
+/** Delete a capture folder safely (refuses paths outside the mirrors root). */
+export function deleteMirror(jobDir: string, outRoot?: string): Promise<void> {
+  return invokeCmd<void>("delete_mirror", { jobDir, outRoot });
+}
+
+/**
+ * Re-scrape a job (Q12). New dated capture by default; `options.overwrite`
+ * rewrites in place. Behaves like `startCrawl` (streams progress, resolves with
+ * the final result).
+ */
+export function rescrape(
+  jobDir: string,
+  options?: RescrapeOptions,
+): Promise<CrawlResult> {
+  return invokeCmd<CrawlResult>("rescrape", { jobDir, options });
 }
 
 /**

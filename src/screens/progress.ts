@@ -9,12 +9,14 @@ import {
   resumeCrawl,
   setCrawlRate,
   resumeJob,
+  rescrape,
   loadJob,
   checkSession,
   type CrawlConfig,
   type CrawlProgress,
   type CrawlResult,
   type CrawlStatus,
+  type RescrapeOptions,
 } from "../tauri";
 import type { Mirror } from "../store";
 import { addMirror } from "../store";
@@ -57,6 +59,13 @@ export function renderProgress(
    * arrives — we don't own the backend promise in this mode.
    */
   reattach?: boolean,
+  /**
+   * Re-scrape mode (M3): re-run an existing job's settings. When set, the crawl
+   * is driven by the `rescrape` command (new dated capture by default, or
+   * overwrite-in-place) instead of `startCrawl`. `config` is only used for the
+   * header/host and rate slider — the backend re-reads authoritative settings.
+   */
+  rescrapeFrom?: { jobDir: string; options?: RescrapeOptions },
 ): void {
   const host = hostOf(config.url);
   const startedAt = Date.now();
@@ -309,9 +318,11 @@ export function renderProgress(
     }
 
     try {
-      const result = resumeFrom
-        ? await resumeJob(resumeFrom)
-        : await startCrawl(config);
+      const result = rescrapeFrom
+        ? await rescrape(rescrapeFrom.jobDir, rescrapeFrom.options)
+        : resumeFrom
+          ? await resumeJob(resumeFrom)
+          : await startCrawl(config);
       if (unlisten) unlisten();
       cleanup();
 

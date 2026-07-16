@@ -706,3 +706,185 @@ a {
   padding: 5px 10px;
   font-size: 12px;
 }
+.cap-status.partial {
+  background: #fff7e6;
+  color: #7a5900;
+}
+
+/* ---- M3: filterable skips panel (F1) --------------------------------- */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.filter-row > label {
+  font-weight: 600;
+  font-size: 13px;
+}
+.filter-select {
+  width: auto;
+  min-width: 200px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.skip-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.skip-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--il-border);
+  font-size: 13px;
+}
+.skip-row:first-child {
+  border-top: none;
+}
+.skip-reason-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: #fdecec;
+  color: #a8322c;
+}
+.skip-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--il-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- M3: capture report (G1) ----------------------------------------- */
+.report-summary {
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.report-group {
+  border-top: 1px solid var(--il-border);
+  padding: 8px 0;
+}
+.report-group summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px;
+  list-style: none;
+}
+.report-group summary::-webkit-details-marker {
+  display: none;
+}
+.report-group .rg-label {
+  font-weight: 600;
+}
+.report-group .rg-label::before {
+  content: "▸ ";
+  color: var(--il-muted);
+}
+.report-group[open] .rg-label::before {
+  content: "▾ ";
+}
+.rg-count {
+  font-weight: 700;
+  color: var(--il-muted);
+}
+.rg-body {
+  padding: 8px 0 6px 16px;
+}
+.rg-explain {
+  margin: 0 0 8px;
+  color: var(--il-muted);
+  font-size: 13px;
+}
+.rg-examples {
+  margin-bottom: 10px;
+}
+.rg-example {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--il-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 0;
+}
+.fix-btn {
+  margin-top: 4px;
+}
+.fidelity-block {
+  margin-top: 16px;
+  border-top: 1px solid var(--il-border);
+  padding-top: 14px;
+}
+.fidelity-head {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.fidelity-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--il-muted);
+  font-size: 13px;
+}
+.fidelity-list li {
+  margin-bottom: 4px;
+}
+
+/* ---- M3: modal sheet (pre-flight D2, re-scrape, delete) --------------- */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 28, 42, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+.sheet {
+  width: 100%;
+  max-width: 440px;
+  background: var(--il-surface);
+  border: 1px solid var(--il-border);
+  border-radius: calc(var(--il-radius) + 4px);
+  box-shadow: var(--il-shadow);
+  padding: 24px;
+}
+.sheet-title {
+  font-size: 18px;
+  margin: 0 0 10px;
+}
+.sheet-body {
+  color: var(--il-muted);
+  font-size: 14px;
+  margin: 0 0 18px;
+}
+.sheet .btn.block {
+  margin-bottom: 10px;
+}
+.sheet .btn.block:last-child {
+  margin-bottom: 0;
+}
+.preflight-scope {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.preflight-scope + .caution,
+.preflight-scope + .hint {
+  margin-top: 0;
+}
+.sheet .caution,
+.sheet .hint {
+  margin: 8px 0;
+}
+.sheet .btn.block:first-of-type {
+  margin-top: 8px;
+}
