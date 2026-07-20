@@ -103,6 +103,16 @@ Signing in unlocks **all features** — there are no tiers, quotas, or extras to
 buy. It's simply the gate that turns scraping on. Once you're in, the app opens
 your **Library** (your list of past and current mirrors).
 
+### Appearance (light or dark)
+
+Under **Settings → Account → Appearance**, the **Theme** control offers **Light**,
+**Dark**, or **Match system** (which follows your operating system's light/dark
+setting). **Match system** is the default.
+
+Your choice is saved to your InterlinedList account, so it **follows you across
+devices** — sign in on another machine and the same theme applies. It's also
+cached locally, so it takes effect instantly and keeps working offline.
+
 ### Forgot your password?
 
 Click **Forgot password?** on the sign-in screen. This opens interlinedlist.com

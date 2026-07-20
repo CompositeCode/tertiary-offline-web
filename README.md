@@ -25,6 +25,8 @@ unlocked.
   live rate control; jobs survive quit, crash, network loss, and session expiry.
 - **Trustworthy results** — a capture report showing captured vs. skipped (with
   reasons) and honest fidelity notes.
+- **Light / dark theme** — Light, Dark, or Match system, synced to your
+  InterlinedList account so it follows you across devices.
 
 ## Quick start
 

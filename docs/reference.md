@@ -438,6 +438,9 @@ organized by capability, followed by an honest list of what did **not** make v1.
 
 - Four-tab **Settings**: Account, Defaults, Storage, Network — persisted to
   `settings.json` in the OS app-config dir; **Defaults pre-populate New Scrape**.
+- **Appearance → Theme** (Account tab): Light / Dark / Match system, **synced to
+  your InterlinedList account** so it follows you across devices, and cached
+  locally so it applies instantly and offline.
 - **Storage**: change the mirrors root via native picker, reveal it, and see
   recursive disk usage.
 - **First-run acceptable-use acknowledgment** (shown once, non-blocking) with

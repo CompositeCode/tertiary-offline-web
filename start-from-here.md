@@ -81,15 +81,24 @@ src-tauri/Cargo.toml
 docs/                    # plan.md, ux-design.md, reference.md, user-guide.md, acceptable-use.md
 ```
 
-## Milestone status (as of `dev` @ 02b06db, version 0.1.0)
+## Milestone status (as of `dev` @ 7c7bc52, version 0.1.0)
 
-M0, M1, M2, M3, M4, M5 have all landed on `dev` (see `git log`). Note the
-`README.md` status table still lists M4/M5 as "Planned" — that table is stale
-relative to `dev`; trust `git log` and `docs/plan.md`. Good first task: reconcile
-the README status table with what's actually shipped.
+M0–M5 have all landed on `dev`/`main` (see `git log`). Since the original
+handoff, two more commits shipped: the **rename to "Offline Web"** and an
+**Appearance → Theme** control (system/light/dark, synced to the InterlinedList
+account — see `src/theme.ts`).
 
-Likely remaining work: finish/polish M5 (settings, first-run ToS, native menus,
-accessibility, **code signing**, auto-update), and any M4 JS-render edge cases.
+**Docs are reconciled with reality** (done 2026-07-20): the README status table
+is current (M4 "Shipped", M5 "Mostly shipped"); the theme feature is now
+documented in `README.md`, `docs/user-guide.md` (§2), and the `docs/reference.md`
+v1 release notes. No stale "InterlinedList Offline" name references remain.
+
+**Builds verified green locally** (2026-07-20, this machine — Node v23, Rust
+1.97 / cargo 1.85 pin): `npm run build` (tsc + vite) and `cargo build` in
+`src-tauri/` both compile clean. `npm install` reports 2 npm audit findings
+(1 moderate, 1 high) in dev deps — worth a look but not blocking.
+
+The remaining work is **release hardening**, not features — see next section.
 
 ## Build & run
 
@@ -161,14 +170,36 @@ what makes an update fire.
 - Specialized subagents are defined in `.claude/agents/` (project-manager,
   engineer, ux-designer, documentation) — use them for their domains.
 
-## First moves for the taker-over
+## What to work on next (prioritized)
 
-1. `git clone … && git checkout dev`, then `npm install && npm run tauri dev` —
-   verify it launches and you can sign in.
-2. Skim `docs/plan.md` (§6 milestones); README status now matches reality.
-3. If you own the repo, activate auto-update by setting the
-   `TAURI_SIGNING_PRIVATE_KEY` secret (see "CI / installers" above), then confirm
-   the next `main` build uploads `latest.json` to the `latest` release.
-4. Remaining M5 items: **OS code signing** (Apple Developer ID + Windows cert →
-   removes Gatekeeper/SmartScreen warnings) and **per-version release tagging** so
-   auto-update actually fires. These need certs/decisions from the human owner.
+The app is feature-complete at 0.1.0; what's left is shipping it. Roughly in order:
+
+1. **Confirm CI is green on GitHub.** Repo:
+   <https://github.com/CompositeCode/tertiary-offline-web> · Actions:
+   <https://github.com/CompositeCode/tertiary-offline-web/actions>. Check the
+   latest `build.yml` run on `main` built installers for all three OSes.
+   (Local builds pass; CI hasn't been eyeballed this session — `gh` was
+   unauthenticated. Run `gh auth login` first, then `gh run list`.)
+2. **Activate auto-update** — set the `TAURI_SIGNING_PRIVATE_KEY` secret (see
+   "CI / installers" above; key is at
+   `~/.tauri/interlinedlist-offline-updater.key` on the source machine), then
+   confirm the next tagged build uploads a signed `latest.json`.
+3. **Cut the first stable release** — bump nothing (already 0.1.0) or bump to
+   0.1.1, then `git tag v0.1.0 && git push origin v0.1.0` so `release.yml` runs
+   and the updater has a baseline to deliver.
+4. **OS code signing** (needs the human owner's certs/$): Apple Developer ID +
+   notarization and a Windows signing cert → removes Gatekeeper/SmartScreen
+   warnings. Everything is wired and gated on secrets; see `src-tauri/PACKAGING.md`.
+5. **Capture the README screenshots** (there's a placeholder at the top of
+   `README.md`): sign-in, New scrape, live Progress, Results.
+
+### Smaller cleanups / known gaps (nice-to-have, not blocking)
+
+- `package.json` `"name"` is still `interlinedlist-offline` (internal npm name;
+  `productName` is correctly "Offline Web"). Harmless, but rename for consistency.
+- `npm audit` flags 2 dev-dep advisories (1 moderate, 1 high) — triage them.
+- **Free-space warning is dormant** — available space reports `0`, so the
+  low-space pre-Start warning never fires (a real mid-job out-of-space auto-pause
+  still works). Needs a small platform FFI; see `docs/reference.md` known-limits.
+- M4 whole-site rendering spawns a fresh headless browser per page (slow) — a
+  shared long-lived browser would speed it up.
