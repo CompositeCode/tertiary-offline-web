@@ -1,5 +1,5 @@
 {
-  "name": "interlinedlist-offline",
+  "name": "offline-web",
   "version": "0.1.0",
   "description": "Offline Web — free desktop app that mirrors web pages to a local folder. Requires an InterlinedList login.",
   "private": true,
