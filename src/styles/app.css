@@ -1040,3 +1040,83 @@ a {
 .banner.update .banner-text {
   flex: 1;
 }
+
+/* ---- Find images ----------------------------------------------------- */
+.img-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.img-title {
+  margin: 0;
+  font-size: 18px;
+}
+.img-status {
+  color: var(--il-muted);
+  font-size: 14px;
+}
+.img-status.img-error {
+  color: var(--il-error-text);
+}
+.img-metrics {
+  color: var(--il-muted);
+  font-size: 13px;
+  margin: 8px 0;
+}
+.img-bar {
+  height: 8px;
+  border-radius: var(--il-radius-pill);
+  background: var(--il-border);
+  overflow: hidden;
+}
+.img-bar-fill {
+  height: 100%;
+  background: var(--il-accent);
+  transition: width 0.2s ease;
+}
+.img-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.img-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.img-thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--il-radius-sm);
+  background: var(--il-surface-hover);
+  border: 1px solid var(--il-border);
+  display: block;
+}
+.img-card {
+  position: relative;
+  cursor: pointer;
+  border-radius: var(--il-radius-sm);
+  overflow: hidden;
+}
+.img-card:hover .img-thumb {
+  border-color: var(--il-border-strong);
+}
+.img-card-license {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.img-card:hover .img-card-license {
+  opacity: 1;
+}

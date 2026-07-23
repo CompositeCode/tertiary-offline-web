@@ -196,6 +196,99 @@ export function scrapePage(url: string, outRoot: string): Promise<ScrapeResult> 
   return invokeCmd<ScrapeResult>("scrape_page", { url, outRoot });
 }
 
+// ---- Image search + download -------------------------------------------
+
+/** Config sent to `start_image_download` (serde camelCase on the Rust side). */
+export interface ImageSearchConfig {
+  /** The search term, e.g. "red panda". */
+  query: string;
+  /** Root folder; images land in `<outRoot>/<query-slug>/`. */
+  outRoot: string;
+  /** How many images to download (clamped 1..=200 on the backend). */
+  maxImages: number;
+  /**
+   * Optional Openverse license filter, e.g. "cc0,pdm" (public domain only) or
+   * "by,by-sa". Omit/empty for any open license.
+   */
+  license?: string;
+  /** Exclude sensitive/mature results. Default true. */
+  safe: boolean;
+  userAgent?: string;
+}
+
+/** Image-download lifecycle status. */
+export type ImageStatus = "searching" | "downloading" | "done" | "stopped" | "error";
+
+/** Live progress payload from `images://progress` events. */
+export interface ImageProgress {
+  status: ImageStatus;
+  query: string;
+  found: number;
+  target: number;
+  downloaded: number;
+  failed: number;
+  bytesDownloaded: number;
+  currentUrl: string;
+  outDir: string;
+  elapsedSecs: number;
+  message: string;
+}
+
+/** One image's outcome. */
+export interface ImageItem {
+  sourceUrl: string;
+  localPath: string;
+  thumbnail: string;
+  title: string;
+  creator: string;
+  license: string;
+  source: string;
+  landingUrl: string;
+  status: "downloaded" | "failed";
+}
+
+/** Final result from `start_image_download`. */
+export interface ImageDownloadResult {
+  outDir: string;
+  query: string;
+  target: number;
+  downloaded: number;
+  failed: number;
+  bytesDownloaded: number;
+  status: ImageStatus;
+  message: string;
+  items: ImageItem[];
+}
+
+/**
+ * Search the web for images and download them. Resolves with the final result
+ * when the download finishes or is stopped. Live updates arrive via
+ * `onImageProgress`.
+ */
+export function startImageDownload(config: ImageSearchConfig): Promise<ImageDownloadResult> {
+  return invokeCmd<ImageDownloadResult>("start_image_download", { config });
+}
+
+/** Cooperatively stop the running image download; saved images are kept. */
+export function stopImageDownload(): Promise<void> {
+  return invokeCmd<void>("stop_image_download");
+}
+
+/**
+ * Subscribe to live image-download progress. Returns an unlisten function; a
+ * no-op in browser mode (no Tauri runtime).
+ */
+export async function onImageProgress(
+  handler: (p: ImageProgress) => void,
+): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen<ImageProgress>("images://progress", (evt) => {
+    handler(evt.payload);
+  });
+  return unlisten;
+}
+
 export function openPath(path: string): Promise<void> {
   return invokeCmd<void>("open_path", { path });
 }

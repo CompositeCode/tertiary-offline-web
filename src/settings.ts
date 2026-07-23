@@ -24,6 +24,7 @@ export interface AppSettings {
   defaultRender: boolean;
   defaultDomainScope: "same" | "subdomains" | "list" | "any";
   mirrorsRoot: string;
+  imagesRoot: string;
   ratePerSec: number;
   concurrency: number;
   respectRobots: boolean;
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultRender: false,
   defaultDomainScope: "same",
   mirrorsRoot: "~/Offline Web",
+  imagesRoot: "~/Offline Web/Images",
   ratePerSec: 1,
   concurrency: 2,
   respectRobots: true,

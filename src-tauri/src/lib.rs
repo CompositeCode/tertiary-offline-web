@@ -30,17 +30,20 @@
 mod auth;
 mod crawl;
 mod fsutil;
+mod images;
 mod render;
 mod scrape;
 mod settings;
 
 use auth::Session;
 use fsutil::{DiskUsage, PathCheck};
+use images::{ImageDownloadResult, ImageProgress, ImageSearchConfig};
 use settings::AppSettings;
 use crawl::{
     CaptureReport, Controller, CrawlConfig, CrawlProgress, CrawlResult, JobSummary, PersistedJob,
     RescrapeOptions,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -60,6 +63,13 @@ impl CrawlState {
     fn current(&self) -> Option<Controller> {
         self.controller.lock().unwrap().clone()
     }
+}
+
+/// App-wide state for the single active image download: a cooperative cancel
+/// flag `stop_image_download` can flip. `None` when no download is running.
+#[derive(Default)]
+struct ImageState {
+    cancel: Mutex<Option<Arc<AtomicBool>>>,
 }
 
 /// Sign in with email + password against interlinedlist.com's sync-token API.
@@ -97,6 +107,67 @@ fn set_remote_theme(theme: String) -> Result<(), String> {
 #[tauri::command]
 fn scrape_page(url: String, out_root: String) -> Result<scrape::ScrapeResult, String> {
     scrape::scrape_page(&url, &out_root)
+}
+
+/// Search the web (Openverse) for openly-licensed images matching a term and
+/// download them to `<out_root>/<query-slug>/`. Runs to completion off the UI
+/// thread, streaming `images://progress` events, and can be cancelled by
+/// `stop_image_download`. Only one download runs at a time.
+#[tauri::command]
+fn start_image_download(
+    app: tauri::AppHandle,
+    config: ImageSearchConfig,
+) -> Result<ImageDownloadResult, String> {
+    // Register a fresh cancel flag as the active download, rejecting if one is
+    // already live (v1 runs one at a time, mirroring the crawler).
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let state = app.state::<ImageState>();
+        let mut guard = state.cancel.lock().unwrap();
+        if guard.is_some() {
+            return Err("An image download is already running.".to_string());
+        }
+        *guard = Some(cancel.clone());
+    }
+
+    let emit_app = app.clone();
+    let emit = move |progress: ImageProgress| {
+        let _ = emit_app.emit("images://progress", progress);
+    };
+    let result = images::run_image_download(config, cancel, emit);
+
+    // Clear the active-download registration regardless of outcome.
+    *app.state::<ImageState>().cancel.lock().unwrap() = None;
+
+    // Notify on a clean, non-empty finish (mirrors the crawl completion notice).
+    if let Ok(res) = &result {
+        if res.status == "done" && res.downloaded > 0 {
+            notify(
+                &app,
+                "Images downloaded",
+                &format!(
+                    "Saved {} image{} for \u{201c}{}\u{201d}.",
+                    res.downloaded,
+                    if res.downloaded == 1 { "" } else { "s" },
+                    res.query
+                ),
+            );
+        }
+    }
+
+    result
+}
+
+/// Cooperatively stop the running image download; images already saved are kept.
+#[tauri::command]
+fn stop_image_download(app: tauri::AppHandle) -> Result<(), String> {
+    match app.state::<ImageState>().cancel.lock().unwrap().as_ref() {
+        Some(flag) => {
+            flag.store(true, Ordering::Relaxed);
+            Ok(())
+        }
+        None => Err("No image download is running.".to_string()),
+    }
 }
 
 /// Register a controller as the active crawl, rejecting if one is already live.
@@ -437,12 +508,16 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
     let new_scrape = MenuItemBuilder::with_id("new-scrape", "New scrape")
         .accelerator("CmdOrCtrl+N")
         .build(app)?;
+    let find_images = MenuItemBuilder::with_id("find-images", "Find images…")
+        .accelerator("CmdOrCtrl+Shift+N")
+        .build(app)?;
     let settings = MenuItemBuilder::with_id("settings", "Settings…")
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
 
     let file = SubmenuBuilder::new(app, "File")
         .item(&new_scrape)
+        .item(&find_images)
         .item(&settings)
         .separator()
         .quit() // native platform Quit (labelled per-OS)
@@ -469,7 +544,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let id = event.id().0.as_str();
     match id {
-        "new-scrape" | "settings" => {
+        "new-scrape" | "find-images" | "settings" => {
             let _ = app.emit("menu://navigate", id.to_string());
         }
         _ => {}
@@ -493,6 +568,7 @@ pub fn run() {
 
     builder
         .manage(CrawlState::default())
+        .manage(ImageState::default())
         .menu(build_menu)
         .on_menu_event(handle_menu_event)
         .setup(|app| {
@@ -506,6 +582,8 @@ pub fn run() {
             get_remote_theme,
             set_remote_theme,
             scrape_page,
+            start_image_download,
+            stop_image_download,
             start_crawl,
             stop_crawl,
             pause_crawl,

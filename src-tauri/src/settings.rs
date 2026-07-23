@@ -61,6 +61,11 @@ pub struct AppSettings {
     #[serde(default = "default_mirrors_root")]
     pub mirrors_root: String,
 
+    /// The images root folder for the image-download feature. Downloads land in
+    /// `<images_root>/<query-slug>/`. Default `~/Offline Web/Images`.
+    #[serde(default = "default_images_root")]
+    pub images_root: String,
+
     // ---- Network (FR-SET-1) ----
     /// Global rate cap (req/s/host). Default 1 (polite).
     #[serde(default = "default_rate")]
@@ -88,6 +93,7 @@ fn default_scope() -> String { "page".to_string() }
 fn default_depth() -> u32 { 2 }
 fn default_domain_scope() -> String { "same".to_string() }
 fn default_mirrors_root() -> String { "~/Offline Web".to_string() }
+fn default_images_root() -> String { "~/Offline Web/Images".to_string() }
 fn default_rate() -> f64 { 1.0 }
 fn default_concurrency() -> u32 { 2 }
 fn default_theme() -> String { "system".to_string() }

@@ -7,6 +7,11 @@ Sign-in with an InterlinedList account gates the scraping features.
 
 Read this file first, then `README.md`, then `docs/plan.md`.
 
+The app is **feature-complete at `0.1.0`** — the remaining work is *shipping it*
+(CI, signing, releasing). The end-to-end shipping procedure lives in
+[**Shipping signed installers**](#shipping-signed-installers--the-full-procedure)
+below (this used to be a separate `THE-STUFF-TO-DO-NOW.md`; it's been folded in).
+
 ---
 
 ## READ THIS FIRST — remote is now synced; a plain clone works
@@ -77,7 +82,9 @@ src-tauri/src/           # Rust backend
   fsutil.rs settings.rs
 src-tauri/tauri.conf.json # bundle config (productName, identifier, targets:"all")
 src-tauri/Cargo.toml
-.github/workflows/build.yml   # CI: installers on push to main (see below)
+src-tauri/PACKAGING.md        # signing inputs the human must supply
+.github/workflows/build.yml   # CI: unsigned rolling prerelease on push to main
+.github/workflows/release.yml # CI: signed per-version release on vX.Y.Z tag
 docs/                    # plan.md, ux-design.md, reference.md, user-guide.md, acceptable-use.md
 ```
 
@@ -98,7 +105,8 @@ v1 release notes. No stale "InterlinedList Offline" name references remain.
 `src-tauri/` both compile clean. `npm install` reports 2 npm audit findings
 (1 moderate, 1 high) in dev deps — worth a look but not blocking.
 
-The remaining work is **release hardening**, not features — see next section.
+The remaining work is **release hardening**, not features — see
+[What to work on next](#what-to-work-on-next-prioritized).
 
 ## Build & run
 
@@ -125,6 +133,15 @@ npm run tauri build
 Sign in with an InterlinedList account **email + password**. Sign-in and scraping
 only work in the desktop app, not the browser preview.
 
+## Conventions
+
+- Match surrounding style; frontend is framework-free vanilla TS on purpose.
+- Brand values are centralized (`src/styles/brand.css`, `src/brand.ts`) for a
+  one-edit swap when official assets land — don't hardcode brand colors/names
+  elsewhere.
+- Specialized subagents are defined in `.claude/agents/` (project-manager,
+  engineer, ux-designer, documentation) — use them for their domains.
+
 ## CI / installers — two channels (`.github/workflows/`)
 
 All three OSes, both channels: **macOS** `.pkg` (universal `.app` wrapped via
@@ -139,40 +156,213 @@ All three OSes, both channels: **macOS** `.pkg` (universal `.app` wrapped via
   This is the channel the in-app updater reads (endpoint →
   `.../releases/latest/download/latest.json`, i.e. newest non-prerelease).
 
-Everything signing-related is **gated on secrets**, so tag builds pass before any
-cert exists (just less-signed). Secrets to add (repo → Settings → Secrets → Actions):
+Everything signing-related is **gated per secret**, so a tag build succeeds even
+with zero secrets — it just produces *unsigned* artifacts. The full step-by-step
+for going from nothing to a signed, notarized, auto-updating release is next.
 
-| Secret(s) | Enables |
-|-----------|---------|
-| `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) | Auto-update (signed `latest.json`). Private key is at `~/.tauri/interlinedlist-offline-updater.key` on the source machine; pubkey already committed in `tauri.conf.json`. |
-| `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | Sign + notarize macOS `.app`/`.dmg` |
-| `APPLE_INSTALLER_CERTIFICATE` (+ `_PASSWORD`, `_IDENTITY`) | Sign the macOS `.pkg` |
-| `WINDOWS_CERTIFICATE` (+ `_PASSWORD`) | Sign Windows `.msi`/`.exe` |
+---
 
-Activate auto-update:
+## Shipping signed installers — the full procedure
+
+Complete, repo-specific procedure for getting **Offline Web** shipped as a signed
+macOS `.pkg` and a signed Windows `.msi`.
+
+Two things worth knowing up front, confirmed against the actual pipeline:
+
+- The updater **pubkey and endpoint are already real** in `tauri.conf.json`
+  (not placeholders — `src-tauri/PACKAGING.md`'s summary reflects this now).
+  **Do not regenerate the updater key** — it breaks auto-update for every
+  already-installed client.
+- **Tauri has no native `.pkg` target.** `bundle.targets: "all"` gives you
+  `.app` + `.dmg` on macOS and `.msi` + `.exe` on Windows. The `.pkg` is produced
+  by a **custom `productbuild` step in `release.yml`** — so it only exists via the
+  CI release path (or if you run `productbuild` by hand, see Part 5).
+
+### How shipping works here
+
+Everything is driven by **pushing a `vX.Y.Z` git tag**, which triggers
+`.github/workflows/release.yml`. That workflow builds on macOS + Windows + Linux
+runners, signs whatever it has secrets for, and publishes a per-version GitHub
+Release with the installers attached. Signing is **independently gated per
+secret** — a tag build succeeds even with zero secrets, it just produces
+*unsigned* artifacts. So "getting it shipped as a signed `.pkg` + `.msi`" =
+**obtain 2 certs → add them as GitHub secrets → tag & push.**
+
+### Part 0 — One-time: obtain the certificates
+
+You cannot produce *distributable* (non-warned) installers without these. This is
+the part that needs money/decisions and can't be automated.
+
+**macOS `.pkg`** needs an **Apple Developer Program** membership ($99/yr) and
+**two** certificates:
+
+| Cert | Signs |
+|---|---|
+| **Developer ID Application** | the `.app` inside the pkg |
+| **Developer ID Installer** | the `.pkg` wrapper itself |
+
+Create both at [developer.apple.com → Certificates](https://developer.apple.com/account/resources/certificates),
+download, and add to Keychain. Also create an **app-specific password**
+(appleid.apple.com → Sign-In & Security) for notarization.
+
+**Windows `.msi`** needs a **code-signing certificate** from a CA (DigiCert,
+Sectigo, SSL.com, etc.):
+
+- **OV** cert — cheaper, but Windows SmartScreen still warns until the download
+  builds "reputation."
+- **EV** cert — immediate SmartScreen reputation; traditionally ships on a
+  hardware token (harder to put in CI). **Azure Trusted Signing** is the modern
+  cloud alternative (the config supports a `signCommand` path if you go that route).
+
+### Part 1 — macOS `.pkg`: export certs → set secrets
+
+**1a. Export each cert as a `.p12`** from Keychain Access (right-click the cert →
+Export, set a password). You'll have `DeveloperIDApplication.p12` and
+`DeveloperIDInstaller.p12`.
+
+**1b. Set the secrets** (base64-encode each `.p12`). From the repo dir with `gh`
+authenticated:
+
 ```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/interlinedlist-offline-updater.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body ""   # key has no password
+# ---- App signing + notarization (signs the .app/.dmg) ----
+gh secret set APPLE_CERTIFICATE < <(base64 -i DeveloperIDApplication.p12)
+gh secret set APPLE_CERTIFICATE_PASSWORD --body 'p12-password'
+gh secret set APPLE_SIGNING_IDENTITY --body 'Developer ID Application: Your Name (TEAMID)'
+gh secret set APPLE_ID --body 'you@example.com'
+gh secret set APPLE_PASSWORD --body 'app-specific-password'   # NOT your Apple ID password
+gh secret set APPLE_TEAM_ID --body 'TEAMID'
+
+# ---- Installer signing (signs the .pkg wrapper) ----
+gh secret set APPLE_INSTALLER_CERTIFICATE < <(base64 -i DeveloperIDInstaller.p12)
+gh secret set APPLE_INSTALLER_CERTIFICATE_PASSWORD --body 'installer-p12-password'
+gh secret set APPLE_INSTALLER_IDENTITY --body 'Developer ID Installer: Your Name (TEAMID)'
 ```
 
-**Cutting a stable release:** bump `version` in `package.json`,
-`src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` (they must match — the tag
-build fails otherwise), commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
-The updater only delivers versions **newer than what's installed**, so the bump is
-what makes an update fire.
+Find the exact identity strings with `security find-identity -v` on the machine
+that has the certs.
 
-## Conventions
+**What CI does with them** (already coded in `release.yml`): the matrix builds a
+`universal-apple-darwin` `.app`, `tauri-action` signs + **notarizes** the
+`.app`/`.dmg`, then the custom step runs `productbuild` to wrap the `.app` into a
+`.pkg` and `productsign`s it with your Installer identity, and uploads it to the
+release.
 
-- Match surrounding style; frontend is framework-free vanilla TS on purpose.
-- Brand values are centralized (`src/styles/brand.css`, `src/brand.ts`) for a
-  one-edit swap when official assets land — don't hardcode brand colors/names
-  elsewhere.
-- Specialized subagents are defined in `.claude/agents/` (project-manager,
-  engineer, ux-designer, documentation) — use them for their domains.
+> ✅ **`.pkg` notarization is handled:** the step signs the `.pkg` **and** — when
+> the `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` notarization secrets are
+> present — runs `xcrun notarytool submit "$out" --wait` + `xcrun stapler staple
+> "$out"`, so the wrapper is stapled and a browser download won't trip Gatekeeper.
+> Without those secrets it still produces a signed-but-un-notarized `.pkg` and logs
+> a warning. (This was previously a known gap; fixed in `release.yml`.)
+
+### Part 2 — Windows `.msi`: export cert → set secrets
+
+**2a. Export the code-signing cert as a `.pfx`** (with a password) — from the CA
+portal or `certmgr.msc → Export → include private key`.
+
+**2b. Set the secrets:**
+
+```bash
+gh secret set WINDOWS_CERTIFICATE < <(base64 -i codesign.pfx)
+gh secret set WINDOWS_CERTIFICATE_PASSWORD --body 'pfx-password'
+```
+
+**What CI does:** the Windows runner imports the PFX, reads its thumbprint, and
+merges `{ bundle.windows.certificateThumbprint }` into a `ci.overlay.json` passed
+to `tauri build` — so `bundle.windows.certificateThumbprint` stays `null` in the
+committed config and is injected only at build time. `targets: "all"` builds both
+the WiX **`.msi`** and the NSIS `.exe`, both signed, with SHA-256 + the DigiCert
+timestamp URL already configured.
+
+### Part 3 — (Recommended) enable auto-update signing
+
+Not required to produce installers, but without it the shipped app can't
+self-update. The **pubkey and endpoint are already committed** — you only need
+the private key:
+
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/interlinedlist-offline-updater.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body ''   # key has no password
+```
+
+This makes CI attach signed updater artifacts + `latest.json` to the release (the
+endpoint already points at `releases/latest/download/latest.json`). The private
+key is at `~/.tauri/interlinedlist-offline-updater.key` on the source machine.
+
+### Part 4 — Ship it: tag & push
+
+**4a. Versions must match across three files or the `verify` job fails fast.**
+They're currently all `0.1.0` (confirmed: `package.json`,
+`src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`). For a real first release,
+decide whether to keep `0.1.0` or bump:
+
+```bash
+# if bumping, edit all three to the SAME version, then commit
+git add -A && git commit -m "Release v0.1.0"
+```
+
+**4b. Tag and push** (the tag drives everything):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+**4c. Monitor and collect** (needs `gh auth login` first):
+
+```bash
+gh run watch                      # follow the release run live
+gh release view v0.1.0            # see the attached installers
+```
+
+The result is a GitHub Release named "Offline Web v0.1.0" with the signed
+`Offline Web_0.1.0_universal.pkg`, `.msi`, `.dmg`, `.exe`, and Linux packages.
+The updater only delivers versions **newer than what's installed**, so the version
+bump is what makes an update fire.
+
+### Part 5 — Local build alternative (no CI)
+
+You can produce installers locally, but **each OS only builds its own** — you need
+a Mac for the `.pkg` and a Windows machine for the `.msi` (no practical
+cross-compilation of installers).
+
+**macOS** (on this machine):
+
+```bash
+export PATH="$HOME/.cargo/bin:$PATH"
+npm run tauri build -- --target universal-apple-darwin
+# -> produces .app + .dmg. To get a .pkg you must run productbuild yourself:
+APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Offline Web.app"
+productbuild --component "$APP" /Applications "Offline Web_0.1.0.pkg"      # unsigned
+# signed: add --sign "Developer ID Installer: Your Name (TEAMID)" via productsign
+```
+
+**Windows** (on a Windows box):
+
+```powershell
+npm run tauri build      # -> target\release\bundle\msi\*.msi  and  \nsis\*.exe
+```
+
+Unsigned locally unless you set `bundle.windows.certificateThumbprint` (or pass a
+`--config` overlay like CI does).
+
+### GitHub secrets checklist (all set via `gh secret set …`)
+
+| Secret | Enables |
+|---|---|
+| `APPLE_CERTIFICATE` (+ `_PASSWORD`) | sign the `.app`/`.dmg` |
+| `APPLE_SIGNING_IDENTITY` | Developer ID Application identity string |
+| `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | notarization (of the `.app`/`.dmg` **and** the `.pkg`) |
+| `APPLE_INSTALLER_CERTIFICATE` (+ `_PASSWORD`, `_IDENTITY`) | sign the `.pkg` |
+| `WINDOWS_CERTIFICATE` (+ `_PASSWORD`) | sign the `.msi`/`.exe` |
+| `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) | signed auto-update artifacts |
+
+---
 
 ## What to work on next (prioritized)
 
-The app is feature-complete at 0.1.0; what's left is shipping it. Roughly in order:
+The app is feature-complete at 0.1.0; what's left is shipping it. Roughly in order
+(the deep how-to for the release steps is in
+[Shipping signed installers](#shipping-signed-installers--the-full-procedure)):
 
 1. **Confirm CI is green on GitHub.** Repo:
    <https://github.com/CompositeCode/tertiary-offline-web> · Actions:
@@ -180,16 +370,14 @@ The app is feature-complete at 0.1.0; what's left is shipping it. Roughly in ord
    latest `build.yml` run on `main` built installers for all three OSes.
    (Local builds pass; CI hasn't been eyeballed this session — `gh` was
    unauthenticated. Run `gh auth login` first, then `gh run list`.)
-2. **Activate auto-update** — set the `TAURI_SIGNING_PRIVATE_KEY` secret (see
-   "CI / installers" above; key is at
-   `~/.tauri/interlinedlist-offline-updater.key` on the source machine), then
+2. **Activate auto-update** — set `TAURI_SIGNING_PRIVATE_KEY` (Part 3), then
    confirm the next tagged build uploads a signed `latest.json`.
-3. **Cut the first stable release** — bump nothing (already 0.1.0) or bump to
-   0.1.1, then `git tag v0.1.0 && git push origin v0.1.0` so `release.yml` runs
-   and the updater has a baseline to deliver.
+3. **Cut the first stable release** — keep `0.1.0` or bump, then
+   `git tag v0.1.0 && git push origin v0.1.0` (Part 4) so `release.yml` runs and
+   the updater has a baseline to deliver.
 4. **OS code signing** (needs the human owner's certs/$): Apple Developer ID +
-   notarization and a Windows signing cert → removes Gatekeeper/SmartScreen
-   warnings. Everything is wired and gated on secrets; see `src-tauri/PACKAGING.md`.
+   notarization (Part 1) and a Windows signing cert (Part 2) → removes
+   Gatekeeper/SmartScreen warnings. Everything is wired and gated on secrets.
 5. **Capture the README screenshots** (there's a placeholder at the top of
    `README.md`): sign-in, New scrape, live Progress, Results.
 

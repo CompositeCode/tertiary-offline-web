@@ -202,6 +202,12 @@ jobs:
           APPLE_INSTALLER_CERTIFICATE: ${{ secrets.APPLE_INSTALLER_CERTIFICATE }}
           APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
           APPLE_INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+          # Notarization creds (same secrets tauri-action uses for the .app/.dmg).
+          # Present -> we also notarize + staple the .pkg so a browser download of
+          # the installer doesn't trip Gatekeeper.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle/macos"
@@ -223,6 +229,20 @@ jobs:
             productsign --sign "$APPLE_INSTALLER_IDENTITY" "$unsigned" "$out"
             rm -f "$unsigned"
             echo "Signed .pkg with '$APPLE_INSTALLER_IDENTITY'."
+            # Notarize + staple the .pkg itself. Signing alone leaves the wrapper
+            # un-notarized, so a browser download can still get a Gatekeeper prompt
+            # even though the inner .app is notarized. Gated on notarization creds.
+            if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+              xcrun notarytool submit "$out" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" \
+                --wait
+              xcrun stapler staple "$out"
+              echo "Notarized + stapled the .pkg."
+            else
+              echo "::warning::APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID not set -> .pkg signed but NOT notarized/stapled (browser downloads may prompt Gatekeeper)."
+            fi
           else
             mv "$unsigned" "$out"
             echo "::warning::APPLE_INSTALLER_CERTIFICATE not set -> .pkg is unsigned."

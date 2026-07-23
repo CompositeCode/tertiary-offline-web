@@ -12,6 +12,7 @@ import type { Route } from "../main";
 import { route } from "../main";
 import { renderLibrary } from "./library";
 import { renderNewScrape } from "./newscrape";
+import { renderImageSearch } from "./images";
 import { renderResults } from "./results";
 import { renderProgress } from "./progress";
 import { renderSettings } from "./settings";
@@ -34,16 +35,18 @@ function installGlobalNav(navigate: (r: Route) => void): void {
     if (!(e.metaKey || e.ctrlKey)) return;
     if (e.key === "n" || e.key === "N") {
       e.preventDefault();
-      navigate("new-scrape");
+      // Shift+N → Find images (parity with the native File menu).
+      navigate(e.shiftKey ? "images" : "new-scrape");
     } else if (e.key === ",") {
       e.preventDefault();
       navigate("settings");
     }
   });
 
-  // Native menu clicks (New scrape / Settings).
+  // Native menu clicks (New scrape / Find images / Settings).
   void onMenuNavigate((id) => {
     if (id === "new-scrape") navigate("new-scrape");
+    else if (id === "find-images") navigate("images");
     else if (id === "settings") navigate("settings");
   });
 }
@@ -97,6 +100,7 @@ export function renderShell(root: HTMLElement, current: Route): void {
     const labels: Record<Route, string> = {
       library: "Library",
       "new-scrape": "New scrape",
+      images: "Find images",
       results: "Results",
       progress: "Progress",
       settings: "Settings",
@@ -116,6 +120,7 @@ export function renderShell(root: HTMLElement, current: Route): void {
   const navItems = el("div", { class: "nav" }, [
     nav("library"),
     nav("new-scrape"),
+    nav("images"),
   ]);
   // Results is only reachable once something has been scraped.
   if (lastMirror) navItems.append(nav("results"));
@@ -237,6 +242,8 @@ export function renderShell(root: HTMLElement, current: Route): void {
     );
   } else if (current === "new-scrape") {
     renderNewScrape(contentInner, goResults, enterProgress);
+  } else if (current === "images") {
+    renderImageSearch(contentInner);
   } else if (current === "progress" && pendingJob) {
     const { config, resumeFrom, reattach, rescrapeFrom } = pendingJob;
     pendingJob = null;

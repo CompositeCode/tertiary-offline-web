@@ -13,7 +13,13 @@ import { pollForUpdate } from "./banners";
  * each screen renders into #app and calls back into `route()` to re-render.
  */
 
-export type Route = "library" | "new-scrape" | "results" | "progress" | "settings";
+export type Route =
+  | "library"
+  | "new-scrape"
+  | "images"
+  | "results"
+  | "progress"
+  | "settings";
 
 const root = document.getElementById("app")!;
 

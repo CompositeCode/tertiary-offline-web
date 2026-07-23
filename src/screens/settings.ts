@@ -318,6 +318,23 @@ function storageTab(s: AppSettings, tauri: boolean): HTMLElement {
   if (!tauri) revealBtn.disabled = true;
   revealBtn.addEventListener("click", () => void revealPath(s.mirrorsRoot).catch(() => {}));
 
+  // Images root folder (the Find-images feature). Its own default so image
+  // downloads don't intermix with page mirrors.
+  const imagesValue = el("div", { class: "readonly-path" }, [s.imagesRoot]);
+  const imagesChangeBtn = el("button", { class: "btn small", type: "button" }, ["Change…"]) as HTMLButtonElement;
+  if (!tauri) imagesChangeBtn.disabled = true;
+  imagesChangeBtn.addEventListener("click", async () => {
+    const picked = await pickFolder(s.imagesRoot);
+    if (picked) {
+      s.imagesRoot = picked;
+      await saveSettings({ imagesRoot: picked });
+      imagesValue.textContent = picked;
+    }
+  });
+  const imagesRevealBtn = el("button", { class: "btn small", type: "button" }, [revealLabel()]) as HTMLButtonElement;
+  if (!tauri) imagesRevealBtn.disabled = true;
+  imagesRevealBtn.addEventListener("click", () => void revealPath(s.imagesRoot).catch(() => {}));
+
   return el("div", { class: "card" }, [
     el("div", { class: "field" }, [
       el("label", {}, ["Mirrors root folder"]),
@@ -325,6 +342,14 @@ function storageTab(s: AppSettings, tauri: boolean): HTMLElement {
       el("div", { class: "hint", style: "margin-top:6px" }, [
         "New captures are written under this folder as <host>/. Existing mirrors " +
           "aren't moved when you change it.",
+      ]),
+    ]),
+    el("div", { class: "field" }, [
+      el("label", {}, ["Images folder"]),
+      el("div", { class: "path-row" }, [imagesValue, imagesChangeBtn, imagesRevealBtn]),
+      el("div", { class: "hint", style: "margin-top:6px" }, [
+        "Downloaded images are written under this folder in a subfolder named for " +
+          "each search.",
       ]),
     ]),
     el("div", { class: "field" }, [
